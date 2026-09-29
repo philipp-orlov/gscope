@@ -1,0 +1,33 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.legend {
+  display: flex;
+  gap: 12px;
+  font-size: 0.72rem;
+  opacity: 0.85;
+  margin-bottom: 4px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.sparkline {
+  display: block;
+  width: 100%;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: crosshair;
+}

@@ -1,0 +1,230 @@
+:host {
+  display: block;
+  min-height: 100%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+
+  .title {
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-left: 4px;
+  }
+
+  .glow-letter {
+    display: inline-block;
+    // A single sweep is a fraction of the 3s cycle (see the per-letter
+    // animation-delay in dashboard.html); the rest of the cycle just sits
+    // at rest, which is what gives the "every few seconds" pulse instead
+    // of a continuous shimmer.
+    animation: letter-glow 3s ease-in-out infinite;
+  }
+
+  .spacer {
+    flex: 1 1 auto;
+  }
+
+  .host-info {
+    opacity: 0.8;
+    font-size: 0.85rem;
+    margin-right: 12px;
+
+    .hostname {
+      opacity: 1;
+      color: #42a5f5;
+      font-weight: 600;
+    }
+  }
+
+  .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 4px;
+    flex: 0 0 auto;
+
+    &.status-open {
+      background: #4caf50;
+    }
+    &.status-connecting {
+      background: #f9a825;
+    }
+    &.status-closed {
+      background: #ef5350;
+    }
+  }
+}
+
+@keyframes letter-glow {
+  0%,
+  8%,
+  100% {
+    color: inherit;
+    text-shadow: none;
+  }
+  3% {
+    color: #42a5f5;
+    text-shadow:
+      0 0 8px rgba(66, 165, 245, 0.9),
+      0 0 16px rgba(66, 165, 245, 0.5);
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  padding: 16px;
+}
+
+.card {
+  mat-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  // mat-card-header lays out its avatar + title/subtitle as a flex row;
+  // a plain sibling span with margin-left: auto rides along in that same
+  // row and lands at the far right -- the overall utilization/throughput
+  // reading for the tile.
+  mat-card-header {
+    align-items: center;
+
+    // Material gives the avatar a 16px bottom margin sized for a
+    // two-line title+subtitle sitting next to it; zero it so the
+    // avatar box itself is centered by align-items: center above.
+    .mat-mdc-card-avatar {
+      margin: 0;
+    }
+
+    // mat-icon's own glyph is only 24px tall inside a 40px block box,
+    // and renders pinned to the top of it -- center the glyph in its box.
+    mat-icon[mat-card-avatar] {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+
+  .title-detail {
+    margin-left: 6px;
+    font-size: 0.8em;
+    font-weight: 400;
+    opacity: 0.65;
+  }
+
+  .tile-metric {
+    margin-left: auto;
+    padding-right: 16px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    opacity: 0.85;
+    white-space: nowrap;
+  }
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.core-bars {
+  display: flex;
+  gap: 3px;
+  height: 64px;
+  align-items: flex-end;
+}
+
+.core-bar {
+  flex: 1 1 auto;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.core-fill {
+  width: 100%;
+  background: linear-gradient(180deg, #66bb6a, #2e7d32);
+  transition: height 0.2s ease-out;
+}
+
+// Shared by the Processes and Temperatures tables: Material's default row
+// height (mat-mdc-row) is roomy enough for touch targets, more than a
+// dense, glance-able readout needs.
+.compact-table {
+  // The MDC table renders real <table>/<th>/<td> (display: table-cell),
+  // so column widths come from table-layout: fixed + a width on each
+  // column, not flex -- without table-layout: fixed, a numeric column
+  // re-flexes its width every update as the digit count changes (e.g.
+  // PID 1 vs 884180), and a long process/kworker name pushes every other
+  // column sideways instead of just truncating.
+  width: 100%;
+  table-layout: fixed;
+
+  .mat-mdc-header-row,
+  .mat-mdc-row {
+    height: 30px;
+  }
+
+  .mat-mdc-header-cell,
+  .mat-mdc-cell {
+    padding: 0 8px;
+    font-size: 0.78rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .mat-mdc-header-cell {
+    font-weight: 600;
+  }
+
+  .mat-column-pid {
+    width: 64px;
+  }
+  .mat-column-cpu {
+    width: 60px;
+  }
+  .mat-column-memoryMb {
+    width: 84px;
+  }
+  .mat-column-celsius {
+    width: 60px;
+  }
+  .mat-column-name {
+    width: auto;
+  }
+}
+
+.temps .mat-column-name {
+  width: 90px;
+}
+
+.processes {
+  grid-column: 1 / -1;
+
+  .empty-note {
+    opacity: 0.7;
+    font-size: 0.85rem;
+  }
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  opacity: 0.7;
+}

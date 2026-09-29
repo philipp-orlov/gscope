@@ -1,0 +1,15 @@
+<div class="legend">
+  @for (item of series(); track item.label) {
+    <span class="legend-item">
+      <span class="legend-dot" [style.background]="item.color"></span>
+      {{ item.label }}
+    </span>
+  }
+</div>
+<canvas
+  #canvas
+  class="sparkline"
+  [style.height.px]="height()"
+  (mousemove)="onMouseMove($event)"
+  (mouseleave)="onMouseLeave()"
+></canvas>
