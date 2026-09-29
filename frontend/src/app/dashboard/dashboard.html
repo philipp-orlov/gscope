@@ -1,0 +1,208 @@
+<mat-toolbar color="primary" class="toolbar">
+  <mat-icon>monitor_heart</mat-icon>
+  <span class="title">
+    @for (letter of titleLetters; track $index) {
+      <span class="glow-letter" [style.animation-delay.ms]="$index * 70">{{ letter }}</span>
+    }
+  </span>
+  <span class="spacer"></span>
+  @if (systemInfo(); as info) {
+    <span class="host-info"><span class="hostname">{{ info.hostname }}</span> &middot; {{ info.provider }}</span>
+  }
+  <span class="status-dot" [class]="'status-' + status()" [matTooltip]="statusLabel()"></span>
+  <button mat-icon-button [matMenuTriggerFor]="tileMenu" matTooltip="Show/hide tiles">
+    <mat-icon>more_vert</mat-icon>
+  </button>
+  <mat-menu #tileMenu="matMenu">
+    @for (item of tileMenuItems; track item.tile) {
+      <button mat-menu-item (click)="toggleTile(item.tile)">
+        <mat-icon>{{ isTileVisible(item.tile) ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+        <span>{{ item.label }}</span>
+      </button>
+    }
+  </mat-menu>
+</mat-toolbar>
+
+<div class="grid">
+  @if (isTileVisible('cpu')) {
+    <mat-card class="card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar matTooltip="Hide/show (C)">developer_board</mat-icon>
+        <mat-card-title>
+          CPU
+          @if (latest(); as sample) {
+            <span class="title-detail">({{ sample.cpu.cores.length }} cores)</span>
+          }
+        </mat-card-title>
+        @if (latest(); as sample) {
+          <span class="tile-metric">{{ cpuUtilizationNow(sample) | number: '1.0-2' }}%</span>
+        }
+      </mat-card-header>
+      <mat-card-content>
+        <gscope-sparkline-chart [series]="cpuChart()" [max]="100" [height]="190" rightUnit="°C" />
+        @if (latest(); as sample) {
+          <div class="core-bars">
+            @for (core of sample.cpu.cores; track $index) {
+              <div class="core-bar" [matTooltip]="coreTooltip(core)">
+                <div class="core-fill" [style.height.%]="core.utilization"></div>
+              </div>
+            }
+          </div>
+        }
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (isTileVisible('gpu') && latest(); as sample) {
+    @for (index of gpuIndices(); track index) {
+      <mat-card class="card">
+        <mat-card-header>
+          <mat-icon mat-card-avatar matTooltip="Hide/show (G)">videogame_asset</mat-icon>
+          <mat-card-title>
+            {{ gpuDisplayName(sample.gpus[index].name) }}
+            <span class="title-detail">#{{ index }}</span>
+          </mat-card-title>
+          <span class="tile-metric">{{ sample.gpus[index].utilization | number: '1.0-2' }}%</span>
+        </mat-card-header>
+        <mat-card-content>
+          <gscope-sparkline-chart [series]="gpuChart(index)" [max]="100" [height]="190" />
+          <div class="stat-row">
+            @if (sample.gpus[index].temperatureC > -900) {
+              <span>{{ sample.gpus[index].temperatureC | number: '1.0-1' }}°C</span>
+            }
+            <span>{{ sample.gpus[index].memoryUsedMb | binarySize }} / {{ sample.gpus[index].memoryTotalMb | binarySize }}</span>
+            @if (sample.gpus[index].powerMw >= 0) {
+              <span>{{ sample.gpus[index].powerMw / 1000 | number: '1.1-1' }} W</span>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+  }
+
+  @if (isTileVisible('memory')) {
+    <mat-card class="card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar matTooltip="Hide/show (M)">sd_storage</mat-icon>
+        <mat-card-title>Memory</mat-card-title>
+        @if (latest(); as sample) {
+          <span class="tile-metric">{{ memoryPercentNow(sample) | number: '1.0-2' }}%</span>
+        }
+      </mat-card-header>
+      <mat-card-content>
+        <gscope-sparkline-chart [series]="memoryChart()" [max]="100" [height]="190" />
+        @if (latest(); as sample) {
+          <div class="stat-row">
+            <span>{{ sample.memory.usedMb | binarySize }} / {{ sample.memory.totalMb | binarySize }}</span>
+            <span>Swap {{ sample.memory.swapUsedMb | binarySize }} / {{ sample.memory.swapTotalMb | binarySize }}</span>
+          </div>
+        }
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (isTileVisible('network')) {
+    <mat-card class="card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar matTooltip="Hide/show (N)">swap_horiz</mat-icon>
+        <mat-card-title>Network</mat-card-title>
+        @if (latest(); as sample) {
+          <span class="tile-metric">{{ networkTotalBytesPerSec(sample) / 1048576 | binarySize }}/s</span>
+        }
+      </mat-card-header>
+      <mat-card-content>
+        <gscope-sparkline-chart [series]="networkChart()" [max]="networkMax()" [height]="190" leftUnit=" MiB/s" />
+        @if (latest(); as sample) {
+          <div class="stat-row">
+            <span>In {{ sample.network.rxBytesPerSec / 1048576 | binarySize }}/s</span>
+            <span>Out {{ sample.network.txBytesPerSec / 1048576 | binarySize }}/s</span>
+          </div>
+        }
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (latest(); as sample) {
+    @if (isTileVisible('temperatures')) {
+    <mat-card class="card temps">
+      <mat-card-header>
+        <mat-icon mat-card-avatar matTooltip="Hide/show (T)">thermostat</mat-icon>
+        <mat-card-title>Temperatures</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <table
+          mat-table
+          class="compact-table"
+          [dataSource]="sortedTemperatures()"
+          matSort
+          matSortActive="celsius"
+          matSortDirection="desc"
+          matSortDisableClear
+          (matSortChange)="temperatureSort.set($event)"
+        >
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Sensor</th>
+            <td mat-cell *matCellDef="let sensor">{{ sensor.name }}</td>
+          </ng-container>
+          <ng-container matColumnDef="celsius">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>&deg;C</th>
+            <td mat-cell *matCellDef="let sensor">{{ sensor.celsius | number: '1.0-1' }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="temperatureColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: temperatureColumns"></tr>
+        </table>
+      </mat-card-content>
+    </mat-card>
+    }
+
+    @if (isTileVisible('processes')) {
+    <mat-card class="card processes">
+      <mat-card-header>
+        <mat-icon mat-card-avatar matTooltip="Hide/show (P)">list_alt</mat-icon>
+        <mat-card-title>
+          Processes
+          <span class="title-detail">(Top {{ sample.processes.length }} by CPU)</span>
+        </mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <table
+          mat-table
+          class="compact-table"
+          [dataSource]="sortedProcesses()"
+          matSort
+          matSortActive="cpu"
+          matSortDirection="desc"
+          matSortDisableClear
+          (matSortChange)="processSort.set($event)"
+        >
+          <ng-container matColumnDef="pid">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>PID</th>
+            <td mat-cell *matCellDef="let process">{{ process.pid }}</td>
+          </ng-container>
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Name</th>
+            <td mat-cell *matCellDef="let process">{{ process.name }}</td>
+          </ng-container>
+          <ng-container matColumnDef="cpu">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>CPU %</th>
+            <td mat-cell *matCellDef="let process">{{ process.cpu | number: '1.0-2' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="memoryMb">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Memory</th>
+            <td mat-cell *matCellDef="let process">{{ process.memoryMb | binarySize }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="processColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: processColumns"></tr>
+        </table>
+        @if (sample.processes.length === 0) {
+          <p class="empty-note">No process data available.</p>
+        }
+      </mat-card-content>
+    </mat-card>
+    }
+  } @else {
+    <mat-card class="card placeholder">
+      <mat-card-content>Waiting for the first reading&hellip;</mat-card-content>
+    </mat-card>
+  }
+</div>
