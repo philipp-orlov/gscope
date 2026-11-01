@@ -103,6 +103,10 @@ add_custom_command(TARGET gscope-daemon POST_BUILD
     COMMENT "Copying public/ next to gscope-daemon")
 
 if(GSCOPE_BUILD_TESTS AND BUILD_TESTING)
+    add_executable(gscope_test_popen_line_stream tests/test_popen_line_stream.cpp)
+    target_link_libraries(gscope_test_popen_line_stream PRIVATE gscope_core)
+    add_test(NAME gscope_popen_line_stream COMMAND gscope_test_popen_line_stream)
+
     add_executable(gscope_test_tegrastats_parser tests/test_tegrastats_parser.cpp)
     target_link_libraries(gscope_test_tegrastats_parser PRIVATE gscope_core)
     add_test(NAME gscope_tegrastats_parser COMMAND gscope_test_tegrastats_parser)

@@ -7,6 +7,7 @@
 // the providers below be unit-tested without the real binaries.
 #pragma once
 
+#include <atomic>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -32,10 +33,10 @@ public:
     virtual void cancel() {}
 };
 
-// Runs `command` via popen(..., "r") and yields its stdout one line at a
-// time. cancel() closes the underlying fd to unblock a thread parked in
-// fgets(); the destructor (called only after that thread has been joined)
-// then pclose()s to reap the child.
+// Runs `command` through /bin/sh and yields its stdout one line at a time. The child gets its own process group.
+// cancel() wakes a nextLine() blocked on another thread through a private pipe: no descriptor is closed under a
+// reader, so a descriptor number cannot be reused while a thread still waits on it. The destructor (called only
+// after the reader thread has been joined) terminates the process group and reaps the child.
 class PopenLineStream : public LineStream
 {
 public:
@@ -46,7 +47,12 @@ public:
     void cancel() override;
 
 private:
-    FILE* pipe_ = nullptr;
+    int pid_ = -1;
+    int outFd_ = -1;
+    int wakeRead_ = -1;
+    int wakeWrite_ = -1;
+    std::atomic<bool> cancelled_{false};
+    std::string pending_;  // bytes read past the last newline
 };
 
 // Test double: replays a fixed list of lines, then reports EOF.
