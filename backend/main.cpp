@@ -56,12 +56,15 @@ std::string kernelRelease()
     return std::string(info.sysname) + " " + info.release;
 }
 
-unsigned parseUnsigned(std::string_view value, const char* optionName)
+unsigned parseUnsigned(std::string_view value, const char* optionName, unsigned minimum, unsigned maximum)
 {
     unsigned result = 0;
     auto parsed = std::from_chars(value.data(), value.data() + value.size(), result);
     if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size())
         throw std::invalid_argument(std::string("invalid value for ") + optionName);
+    if (result < minimum || result > maximum)
+        throw std::invalid_argument(std::string(optionName) + " must be between " + std::to_string(minimum) +
+                                    " and " + std::to_string(maximum));
     return result;
 }
 
@@ -96,18 +99,18 @@ try {
         const std::string_view value(argv[++index]);
 
         if (option == "--port")
-            config.port = static_cast<uint16_t>(parseUnsigned(value, "--port"));
+            config.port = static_cast<uint16_t>(parseUnsigned(value, "--port", 1, 65535));
         else if (option == "--interval-ms")
-            intervalMs = parseUnsigned(value, "--interval-ms");
+            intervalMs = parseUnsigned(value, "--interval-ms", 100, 3600000);
         else if (option == "--history-size")
-            historySize = parseUnsigned(value, "--history-size");
+            historySize = parseUnsigned(value, "--history-size", 1, 100000);
         else if (option == "--provider")
             forcedProvider = value;
         else if (option == "--public-dir") {
             publicDir = value;
             publicDirOverridden = true;
         } else if (option == "--io-threads")
-            config.ioThreads = parseUnsigned(value, "--io-threads");
+            config.ioThreads = parseUnsigned(value, "--io-threads", 1, 256);
         else
             throw std::invalid_argument("unknown argument: " + std::string(option));
     }
