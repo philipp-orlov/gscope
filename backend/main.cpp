@@ -16,6 +16,7 @@
 
 #include "cfg/cfg.hpp"
 #include "http/logger.hpp"
+#include "hw/log.hpp"
 #include "http/server.hpp"
 #include "gscope/metrics_service.hpp"
 #include "gscope/provider.hpp"
@@ -100,6 +101,7 @@ try {
             publicDirOverridden = true;
 
     Logger::instance().setLevel(LogLevel::Info);
+    hw::setWarnHook([](const char* message) { HTTP_LOG_WARN("%s", message); });
 
     gscope::MetricsService metrics(
         forcedProvider.empty() ? gscope::detectProvider(intervalMs)

@@ -2,15 +2,7 @@
 # Wired in from ../CMakeLists.txt.
 
 add_library(gscope_core STATIC
-    src/line_stream.cpp
-    src/tegrastats_provider.cpp
-    src/nvidia_smi_provider.cpp
-    src/nvml_provider.cpp
-    src/proc_provider.cpp
-    src/process_sampler.cpp
-    src/network_sampler.cpp
     src/frontend_version.cpp
-    src/provider_factory.cpp
     src/json_codec.cpp
     src/metrics_service.cpp
 )
@@ -20,7 +12,7 @@ target_include_directories(gscope_core PUBLIC include)
 # portable way to pull in dlopen()/dlsym() (a no-op on glibc >= 2.34, where
 # they live in libc itself; -ldl on older glibc). This never requires NVML
 # to actually be present, so it doesn't affect Jetson builds.
-target_link_libraries(gscope_core PUBLIC http develop::sys develop::cfg ${CMAKE_DL_LIBS})
+target_link_libraries(gscope_core PUBLIC http develop::sys develop::cfg develop::hw ${CMAKE_DL_LIBS})
 target_compile_options(gscope_core PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -O2>
 )
