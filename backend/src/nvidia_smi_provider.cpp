@@ -92,15 +92,10 @@ bool NvidiaSmiProvider::start(SampleCallback callback)
     if (gpuCount_ == 0 && !streamFactory_) {
         // Probe the device count once so the read loop knows how many
         // consecutive CSV lines make up one sample.
-        FILE* countPipe = popen("nvidia-smi --query-gpu=count --format=csv,noheader", "r");
-        if (!countPipe) {
-            running_ = false;
-            return false;
-        }
-        char buffer[64] = {0};
-        if (std::fgets(buffer, sizeof(buffer), countPipe))
-            gpuCount_ = static_cast<unsigned>(std::strtoul(buffer, nullptr, 10));
-        pclose(countPipe);
+        PopenLineStream probe(std::vector<std::string>{"nvidia-smi", "--query-gpu=count", "--format=csv,noheader"});
+        std::string line;
+        if (probe.nextLine(line))
+            gpuCount_ = static_cast<unsigned>(std::strtoul(line.c_str(), nullptr, 10));
         if (gpuCount_ == 0) {
             running_ = false;
             return false;
@@ -111,10 +106,9 @@ bool NvidiaSmiProvider::start(SampleCallback callback)
 
     stream_ = streamFactory_
                   ? streamFactory_()
-                  : std::make_unique<PopenLineStream>(
-                        "nvidia-smi --query-gpu=" + std::string(kQueryFields) +
-                        " --format=csv,noheader,nounits -l " +
-                        std::to_string(std::max(1u, intervalMs_ / 1000)));
+                  : std::make_unique<PopenLineStream>(std::vector<std::string>{
+                        "nvidia-smi", "--query-gpu=" + std::string(kQueryFields), "--format=csv,noheader,nounits",
+                        "-l", std::to_string(std::max(1u, intervalMs_ / 1000))});
     if (!stream_) {
         running_ = false;
         return false;

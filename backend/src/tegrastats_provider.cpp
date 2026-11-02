@@ -158,7 +158,7 @@ bool TegrastatsProvider::start(SampleCallback callback)
     stream_ = streamFactory_
                   ? streamFactory_()
                   : std::make_unique<PopenLineStream>(
-                        "tegrastats --interval " + std::to_string(intervalMs_));
+                        std::vector<std::string>{"tegrastats", "--interval", std::to_string(intervalMs_)});
     if (!stream_) {
         running_ = false;
         return false;

@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <sys/utsname.h>
 
+#include "cfg/cfg.hpp"
 #include "http/logger.hpp"
 #include "http/server.hpp"
 #include "gscope/metrics_service.hpp"
@@ -56,18 +57,6 @@ std::string kernelRelease()
     return std::string(info.sysname) + " " + info.release;
 }
 
-unsigned parseUnsigned(std::string_view value, const char* optionName, unsigned minimum, unsigned maximum)
-{
-    unsigned result = 0;
-    auto parsed = std::from_chars(value.data(), value.data() + value.size(), result);
-    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size())
-        throw std::invalid_argument(std::string("invalid value for ") + optionName);
-    if (result < minimum || result > maximum)
-        throw std::invalid_argument(std::string(optionName) + " must be between " + std::to_string(minimum) +
-                                    " and " + std::to_string(maximum));
-    return result;
-}
-
 }  // namespace
 
 int main(int argc, char** argv)
@@ -85,35 +74,30 @@ try {
     std::string publicDir = "./public";
     bool publicDirOverridden = false;
 
-    for (int index = 1; index < argc; ++index) {
-        const std::string_view option(argv[index]);
-        if (option == "--help") {
-            std::puts(
-                "gscope-daemon [--port PORT] [--interval-ms MS] [--history-size N] "
-                "[--provider tegrastats|nvml|nvidia-smi|proc] [--public-dir DIR] "
-                "[--io-threads N]");
-            return 0;
-        }
-        if (index + 1 == argc)
-            throw std::invalid_argument("missing value for " + std::string(option));
-        const std::string_view value(argv[++index]);
-
-        if (option == "--port")
-            config.port = static_cast<uint16_t>(parseUnsigned(value, "--port", 1, 65535));
-        else if (option == "--interval-ms")
-            intervalMs = parseUnsigned(value, "--interval-ms", 100, 3600000);
-        else if (option == "--history-size")
-            historySize = parseUnsigned(value, "--history-size", 1, 100000);
-        else if (option == "--provider")
-            forcedProvider = value;
-        else if (option == "--public-dir") {
-            publicDir = value;
-            publicDirOverridden = true;
-        } else if (option == "--io-threads")
-            config.ioThreads = parseUnsigned(value, "--io-threads", 1, 256);
-        else
-            throw std::invalid_argument("unknown argument: " + std::string(option));
+    cfg::Schema options;
+    uint16_t port = 8081;
+    unsigned ioThreads = 2;
+    bool help = false;
+    options.addInt(port, "port", port, uint16_t{1}, uint16_t{65535}, "listen port");
+    options.addInt(intervalMs, "interval-ms", intervalMs, 100u, 3600000u, "sampling interval");
+    options.addInt(historySize, "history-size", historySize, 1u, 100000u, "samples kept for new clients");
+    options.addString(forcedProvider, "provider", "", "tegrastats|nvml|nvidia-smi|proc (default: detect)");
+    options.addString(publicDir, "public-dir", publicDir, "serve the UI from disk instead of the embedded copy");
+    options.addInt(ioThreads, "io-threads", ioThreads, 1u, 256u, "reactor threads");
+    options.addBool(help, "help", false, "show this text");
+    if (auto status = options.fromArgv(argc, argv); !status.ok())
+        throw std::invalid_argument(std::string(status.message()));
+    if (help) {
+        std::printf("gscope-daemon [options]\n%s", options.help().c_str());
+        return 0;
     }
+    if (!options.positional().empty())
+        throw std::invalid_argument("unexpected argument: " + options.positional().front());
+    config.port = port;
+    config.ioThreads = ioThreads;
+    for (int i = 1; i < argc; ++i)
+        if (std::string_view(argv[i]).substr(0, 12) == "--public-dir")
+            publicDirOverridden = true;
 
     Logger::instance().setLevel(LogLevel::Info);
 

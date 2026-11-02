@@ -17,6 +17,13 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     include(CTest)
 endif()
 
+# develop-core: a sibling checkout by default; ignored when the including project already provides the targets.
+set(GSCOPE_DEVELOP_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../develop-core" CACHE PATH "Path to a develop-core checkout")
+if(NOT TARGET develop::sys)
+    set(DEVELOP_BUILD_TESTS OFF CACHE BOOL "")
+    add_subdirectory("${GSCOPE_DEVELOP_CORE_DIR}" develop-core)
+endif()
+
 if(NOT TARGET http)
     set(HTTP_BUILD_EXAMPLES OFF CACHE BOOL "")
     set(HTTP_BUILD_TESTS OFF CACHE BOOL "")

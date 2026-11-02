@@ -20,7 +20,7 @@ target_include_directories(gscope_core PUBLIC include)
 # portable way to pull in dlopen()/dlsym() (a no-op on glibc >= 2.34, where
 # they live in libc itself; -ldl on older glibc). This never requires NVML
 # to actually be present, so it doesn't affect Jetson builds.
-target_link_libraries(gscope_core PUBLIC http ${CMAKE_DL_LIBS})
+target_link_libraries(gscope_core PUBLIC http develop::sys develop::cfg ${CMAKE_DL_LIBS})
 target_compile_options(gscope_core PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -O2>
 )

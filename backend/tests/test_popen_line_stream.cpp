@@ -27,6 +27,16 @@ using Clock = std::chrono::steady_clock;
 
 int main()
 {
+    // The argv form runs no shell: metacharacters are plain text, and a missing program is just an empty stream.
+    {
+        gscope::PopenLineStream stream(std::vector<std::string>{"/bin/echo", "$(touch /tmp/gscope_never); a|b"});
+        std::string line;
+        check(stream.nextLine(line) && line == "$(touch /tmp/gscope_never); a|b", "argv form is not interpreted");
+        gscope::PopenLineStream missing(std::vector<std::string>{"/definitely/not/here"});
+        check(!missing.nextLine(line), "missing program gives EOF");
+        check(access("/tmp/gscope_never", F_OK) != 0, "no shell ran");
+    }
+
     // Lines are split, a last line without a newline is delivered, then the stream ends.
     {
         gscope::PopenLineStream stream("printf 'one\\ntwo\\nthree'");

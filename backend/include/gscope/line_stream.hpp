@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include "sys/process.hpp"
+
 namespace gscope {
 
 class LineStream
@@ -33,13 +35,15 @@ public:
     virtual void cancel() {}
 };
 
-// Runs `command` through /bin/sh and yields its stdout one line at a time. The child gets its own process group.
-// cancel() wakes a nextLine() blocked on another thread through a private pipe: no descriptor is closed under a
-// reader, so a descriptor number cannot be reused while a thread still waits on it. The destructor (called only
-// after the reader thread has been joined) terminates the process group and reaps the child.
+// Runs a child process and yields its stdout one line at a time (sys::Process underneath: own process group,
+// SIGTERM then SIGKILL and reaping in the destructor). cancel() wakes a nextLine() blocked on another thread
+// without closing any descriptor. The destructor must run only after the reader thread has been joined.
 class PopenLineStream : public LineStream
 {
 public:
+    // No shell: argv[0] is looked up in PATH. A program that cannot be started gives a stream that is at EOF.
+    explicit PopenLineStream(std::vector<std::string> argv);
+    // Convenience for tests and shell one-liners: runs `/bin/sh -c command`.
     explicit PopenLineStream(const std::string& command);
     ~PopenLineStream() override;
 
@@ -47,12 +51,8 @@ public:
     void cancel() override;
 
 private:
-    int pid_ = -1;
-    int outFd_ = -1;
-    int wakeRead_ = -1;
-    int wakeWrite_ = -1;
-    std::atomic<bool> cancelled_{false};
-    std::string pending_;  // bytes read past the last newline
+    void start(std::vector<std::string> argv);
+    std::unique_ptr<sys::Process> process_;
 };
 
 // Test double: replays a fixed list of lines, then reports EOF.
