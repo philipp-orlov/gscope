@@ -157,6 +157,7 @@ if(GSCOPE_BUILD_TESTS AND BUILD_TESTING)
     if(GSCOPE_NODE)
         add_test(NAME gscope_frontend_wire_up_to_date
                  COMMAND ${GSCOPE_NODE} scripts/vendor-librpc.mjs $<TARGET_FILE:rpcc> --check
+                         --librpc ${GSCOPE_LIBRPC_DIR} --libbufs ${RPC_BUFS_DIR}
                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../frontend)
     endif()
 

@@ -2,7 +2,8 @@
 // Regenerates what the dashboard takes from librpc: the TypeScript for ../backend/include/gscope/wire/monitor.bufs
 // (rpcc --ts) into src/app/core/wire, and a copy of librpc's TypeScript runtime (with the libbufs reader and builder
 // it re-exports) into src/app/core/librpc. The same scheme as libsql's tools/sql/ui/scripts/vendor-librpc.mjs.
-//   node scripts/vendor-librpc.mjs path/to/rpcc [--check]
+//   node scripts/vendor-librpc.mjs path/to/rpcc [--check] [--librpc DIR] [--libbufs DIR]
+// --librpc and --libbufs: the checkouts whose ts/src runtimes are copied; sibling checkouts of gscope by default.
 // With --check nothing is written: it exits 1 if the committed files differ (the ctest gscope_frontend_wire_up_to_date).
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -14,13 +15,17 @@ const frontend = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const gscope = path.join(frontend, '..');
 const rpcc = process.argv[2];
 const check = process.argv.includes('--check');
+const option = (name, fallback) => {
+  const at = process.argv.indexOf(name);
+  return at > 0 && process.argv[at + 1] ? path.resolve(process.argv[at + 1]) : fallback;
+};
 if (!rpcc) {
   console.error('usage: node scripts/vendor-librpc.mjs path/to/rpcc [--check]');
   process.exit(2);
 }
 const schema = path.join(gscope, 'backend/include/gscope/wire/monitor.bufs');
-const runtime = path.join(gscope, '../librpc/ts/src');
-const bufsRuntime = path.join(gscope, '../libbufs/ts/src');
+const runtime = path.join(option('--librpc', path.join(gscope, '../librpc')), 'ts/src');
+const bufsRuntime = path.join(option('--libbufs', path.join(gscope, '../libbufs')), 'ts/src');
 const out = check ? fs.mkdtempSync(path.join(os.tmpdir(), 'gscope-wire-')) : path.join(frontend, 'src/app/core');
 fs.mkdirSync(path.join(out, 'wire'), { recursive: true });
 fs.mkdirSync(path.join(out, 'librpc'), { recursive: true });
