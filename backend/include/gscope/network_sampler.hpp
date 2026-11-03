@@ -3,7 +3,7 @@
 
 #pragma once
 
-// Moved to develop-core's libhw (hw/network_sampler.hpp); this keeps the old path and the gscope:: names.
+// Moved to libcore's libhw (hw/network_sampler.hpp); this keeps the old path and the gscope:: names.
 #include "hw/network_sampler.hpp"
 
 namespace gscope {

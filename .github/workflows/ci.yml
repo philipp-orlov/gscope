@@ -17,14 +17,14 @@ jobs:
           path: libhttp
       - uses: actions/checkout@v4
         with:
-          repository: philipp-orlov/develop-core
-          path: develop-core
+          repository: philipp-orlov/libcore
+          path: libcore
           ref: main
       - name: Install tools
         run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
       - name: Configure
         run: >-
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGSCOPE_LIBHTTP_DIR=$GITHUB_WORKSPACE/libhttp -DGSCOPE_DEVELOP_CORE_DIR=$GITHUB_WORKSPACE/develop-core  
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGSCOPE_LIBHTTP_DIR=$GITHUB_WORKSPACE/libhttp -DGSCOPE_LIBCORE_DIR=$GITHUB_WORKSPACE/libcore  
       - name: Build
         run: cmake --build build
       - name: Test
@@ -40,14 +40,14 @@ jobs:
           path: libhttp
       - uses: actions/checkout@v4
         with:
-          repository: philipp-orlov/develop-core
-          path: develop-core
+          repository: philipp-orlov/libcore
+          path: libcore
           ref: main
       - name: Install tools
         run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
       - name: Configure
         run: >-
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DGSCOPE_LIBHTTP_DIR=$GITHUB_WORKSPACE/libhttp -DGSCOPE_DEVELOP_CORE_DIR=$GITHUB_WORKSPACE/develop-core  "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DGSCOPE_LIBHTTP_DIR=$GITHUB_WORKSPACE/libhttp -DGSCOPE_LIBCORE_DIR=$GITHUB_WORKSPACE/libcore  "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer"
       - name: Build
         run: cmake --build build
       - name: Test
@@ -66,14 +66,14 @@ jobs:
           path: libhttp
       - uses: actions/checkout@v4
         with:
-          repository: philipp-orlov/develop-core
-          path: develop-core
+          repository: philipp-orlov/libcore
+          path: libcore
           ref: main
       - name: Install tools
         run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
       - name: Configure
         run: >-
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DGSCOPE_LIBHTTP_DIR=$GITHUB_WORKSPACE/libhttp -DGSCOPE_DEVELOP_CORE_DIR=$GITHUB_WORKSPACE/develop-core  -DCMAKE_CXX_COMPILER=clang++ "-DCMAKE_CXX_FLAGS=-fsanitize=thread -fno-omit-frame-pointer"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DGSCOPE_LIBHTTP_DIR=$GITHUB_WORKSPACE/libhttp -DGSCOPE_LIBCORE_DIR=$GITHUB_WORKSPACE/libcore  -DCMAKE_CXX_COMPILER=clang++ "-DCMAKE_CXX_FLAGS=-fsanitize=thread -fno-omit-frame-pointer"
       - name: Build
         run: cmake --build build
       - name: Test

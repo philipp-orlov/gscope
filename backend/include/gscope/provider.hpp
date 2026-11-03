@@ -3,7 +3,7 @@
 
 #pragma once
 
-// Moved to develop-core's libhw (hw/provider.hpp); this keeps the old path and the gscope:: names.
+// Moved to libcore's libhw (hw/provider.hpp); this keeps the old path and the gscope:: names.
 #include "hw/provider.hpp"
 
 namespace gscope {

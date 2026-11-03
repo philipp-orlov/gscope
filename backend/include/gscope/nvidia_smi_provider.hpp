@@ -3,7 +3,7 @@
 
 #pragma once
 
-// Moved to develop-core's libhw (hw/nvidia_smi_provider.hpp); this keeps the old path and the gscope:: names.
+// Moved to libcore's libhw (hw/nvidia_smi_provider.hpp); this keeps the old path and the gscope:: names.
 #include "hw/nvidia_smi_provider.hpp"
 
 namespace gscope {

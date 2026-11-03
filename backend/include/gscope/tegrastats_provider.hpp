@@ -3,7 +3,7 @@
 
 #pragma once
 
-// Moved to develop-core's libhw (hw/tegrastats_provider.hpp); this keeps the old path and the gscope:: names.
+// Moved to libcore's libhw (hw/tegrastats_provider.hpp); this keeps the old path and the gscope:: names.
 #include "hw/tegrastats_provider.hpp"
 
 namespace gscope {
