@@ -11,8 +11,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { MetricsService } from '../core/metrics.service';
 import { ProcessSample, Sample, TemperatureSample } from '../models/metrics.model';
-import { BinarySizePipe } from '../shared/binary-size.pipe';
-import { SparklineChart, SparklineSeries } from '../shared/sparkline-chart/sparkline-chart';
+import { SparklineChartComponent, SparklineSeries } from '@ui-kit/angular/charts';
+import { BinarySizePipe } from '@ui-kit/angular/utils';
 
 // Pure data-shaping helpers, exported so they're testable without
 // rendering the component or touching a canvas.
@@ -26,8 +26,9 @@ export function cpuUtilizationSeries(history: Sample[]): number[] {
   return history.map((sample) => average(sample.cpu.cores.map((core) => core.utilization)));
 }
 
-export function temperatureSeries(history: Sample[], sensorName: string): number[] {
-  return history.map((sample) => sample.temperatures.find((t) => t.name === sensorName)?.celsius ?? 0);
+// A sensor missing from a sample is a gap in the line (null), not a drop to 0 °C.
+export function temperatureSeries(history: Sample[], sensorName: string): (number | null)[] {
+  return history.map((sample) => sample.temperatures.find((t) => t.name === sensorName)?.celsius ?? null);
 }
 
 export function memoryPercentSeries(history: Sample[]): number[] {
@@ -65,11 +66,11 @@ export function gpuUtilizationSeries(history: Sample[], index: number): number[]
 }
 
 // GpuSample.temperatureC uses -1000 as an "unavailable" sentinel; charted
-// as 0 rather than distorting the whole series' scale.
-export function gpuTemperatureSeries(history: Sample[], index: number): number[] {
+// as a gap (null) -- neither -1000 nor a fake 0 °C dip.
+export function gpuTemperatureSeries(history: Sample[], index: number): (number | null)[] {
   return history.map((sample) => {
     const value = sample.gpus[index]?.temperatureC;
-    return value === undefined || value <= -900 ? 0 : value;
+    return value === undefined || value <= -900 ? null : value;
   });
 }
 
@@ -188,7 +189,7 @@ export const TILE_MENU_ITEMS: { tile: TileKey; label: string; shortcut: string }
     MatTableModule,
     MatToolbarModule,
     MatTooltipModule,
-    SparklineChart,
+    SparklineChartComponent,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
@@ -299,9 +300,12 @@ export class Dashboard {
     return Array.from({ length: count }, (_, index) => index);
   });
 
-  gpuChart(index: number): SparklineSeries[] {
+  // One computed for all GPUs: a method called from the template built new
+  // arrays on every change detection pass (a tooltip opening, a menu), and
+  // every GPU chart redrew for nothing.
+  readonly gpuCharts = computed<SparklineSeries[][]>(() => {
     const history = this.metrics.history();
-    return [
+    return this.gpuIndices().map((index) => [
       {
         label: 'Utilization',
         color: '#7e57c2',
@@ -315,6 +319,6 @@ export class Dashboard {
         values: gpuMemoryPercentSeries(history, index),
         unit: '%',
       },
-    ];
-  }
+    ]);
+  });
 }

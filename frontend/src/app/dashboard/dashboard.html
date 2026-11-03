@@ -39,7 +39,7 @@
         }
       </mat-card-header>
       <mat-card-content>
-        <gscope-sparkline-chart [series]="cpuChart()" [max]="100" [height]="190" rightUnit="°C" />
+        <ui-sparkline-chart [series]="cpuChart()" [max]="100" [height]="190" rightUnit="°C" />
         @if (latest(); as sample) {
           <div class="core-bars">
             @for (core of sample.cpu.cores; track $index) {
@@ -65,7 +65,7 @@
           <span class="tile-metric">{{ sample.gpus[index].utilization | number: '1.0-2' }}%</span>
         </mat-card-header>
         <mat-card-content>
-          <gscope-sparkline-chart [series]="gpuChart(index)" [max]="100" [height]="190" />
+          <ui-sparkline-chart [series]="gpuCharts()[index]" [max]="100" [height]="190" />
           <div class="stat-row">
             @if (sample.gpus[index].temperatureC > -900) {
               <span>{{ sample.gpus[index].temperatureC | number: '1.0-1' }}°C</span>
@@ -90,7 +90,7 @@
         }
       </mat-card-header>
       <mat-card-content>
-        <gscope-sparkline-chart [series]="memoryChart()" [max]="100" [height]="190" />
+        <ui-sparkline-chart [series]="memoryChart()" [max]="100" [height]="190" />
         @if (latest(); as sample) {
           <div class="stat-row">
             <span>{{ sample.memory.usedMb | binarySize }} / {{ sample.memory.totalMb | binarySize }}</span>
@@ -111,7 +111,7 @@
         }
       </mat-card-header>
       <mat-card-content>
-        <gscope-sparkline-chart [series]="networkChart()" [max]="networkMax()" [height]="190" leftUnit=" MiB/s" />
+        <ui-sparkline-chart [series]="networkChart()" [max]="networkMax()" [height]="190" leftUnit=" MiB/s" />
         @if (latest(); as sample) {
           <div class="stat-row">
             <span>In {{ sample.network.rxBytesPerSec / 1048576 | binarySize }}/s</span>

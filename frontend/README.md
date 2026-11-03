@@ -5,7 +5,12 @@ data over a WebSocket (`/ws/metrics`); no polling.
 
 ## Setup
 
+The charts and the size pipe come from the shared web-ui-kit (`../../web-ui-kit`: `@ui-kit/core` and
+`@ui-kit/angular`, `file:` dependencies). Build it first, and run `npm install` here again after
+every rebuild of the kit (`.npmrc` sets `install-links`, so npm copies it in):
+
 ```sh
+(cd ../../web-ui-kit/angular && npm install && npm run build)
 npm install
 ```
 
@@ -44,7 +49,6 @@ src/app/
   core/
     websocket-factory.ts        Injectable WebSocket construction (the test seam)
     metrics.service.ts          Owns the WebSocket connection, history buffer, reconnect/backoff
-  shared/sparkline-chart/       Canvas-based compact multi-series line chart
   dashboard/                    The page: CPU/memory/per-GPU cards + temperature chips
 ```
 

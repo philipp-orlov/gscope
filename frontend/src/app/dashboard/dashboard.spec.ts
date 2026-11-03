@@ -60,9 +60,9 @@ describe('dashboard data helpers', () => {
     expect(cpuUtilizationSeries([makeSample()])).toEqual([20]); // (10 + 30) / 2
   });
 
-  it('reads a named temperature sensor, defaulting to 0 when absent', () => {
+  it('reads a named temperature sensor, a gap (null) when absent', () => {
     expect(temperatureSeries([makeSample()], 'CPU')).toEqual([55]);
-    expect(temperatureSeries([makeSample()], 'GPU')).toEqual([0]);
+    expect(temperatureSeries([makeSample()], 'GPU')).toEqual([null]);
   });
 
   it('computes memory and swap percentages', () => {
@@ -80,7 +80,7 @@ describe('dashboard data helpers', () => {
     expect(gpuTemperatureSeries([makeSample()], 0)).toEqual([45]);
   });
 
-  it('treats the GPU temperature sentinel as 0 rather than -1000', () => {
+  it('charts the GPU temperature sentinel as a gap, neither -1000 nor 0', () => {
     const sample = makeSample({
       gpus: [
         {
@@ -94,7 +94,7 @@ describe('dashboard data helpers', () => {
         },
       ],
     });
-    expect(gpuTemperatureSeries([sample], 0)).toEqual([0]);
+    expect(gpuTemperatureSeries([sample], 0)).toEqual([null]);
   });
 });
 
