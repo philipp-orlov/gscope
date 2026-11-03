@@ -160,65 +160,21 @@
   transition: height 0.2s ease-out;
 }
 
-// Shared by the Processes and Temperatures tables: Material's default row
-// height (mat-mdc-row) is roomy enough for touch targets, more than a
-// dense, glance-able readout needs.
-.compact-table {
-  // The MDC table renders real <table>/<th>/<td> (display: table-cell),
-  // so column widths come from table-layout: fixed + a width on each
-  // column, not flex -- without table-layout: fixed, a numeric column
-  // re-flexes its width every update as the digit count changes (e.g.
-  // PID 1 vs 884180), and a long process/kworker name pushes every other
-  // column sideways instead of just truncating.
-  width: 100%;
-  table-layout: fixed;
-
-  .mat-mdc-header-row,
-  .mat-mdc-row {
-    height: 30px;
-  }
-
-  .mat-mdc-header-cell,
-  .mat-mdc-cell {
-    padding: 0 8px;
-    font-size: 0.78rem;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  .mat-mdc-header-cell {
-    font-weight: 600;
-  }
-
-  .mat-column-pid {
-    width: 64px;
-  }
-  .mat-column-cpu {
-    width: 60px;
-  }
-  .mat-column-memoryMb {
-    width: 84px;
-  }
-  .mat-column-celsius {
-    width: 60px;
-  }
-  .mat-column-name {
-    width: auto;
-  }
-}
-
-.temps .mat-column-name {
-  width: 90px;
+// Shared by the Processes and Temperatures grids: denser than the grid's
+// defaults (40px rows, 48px header), which suit touch more than a
+// glance-able readout.
+.compact-grid {
+  --ui-grid-header-height: 30px;
+  --ui-grid-header-font: 600 0.78rem / 1 Roboto, sans-serif;
+  --ui-grid-cell-padding: 8px;
+  // The card's own colour (mat-card: surface-container-low), not a band of page colour.
+  --ui-grid-header-background: var(--mat-sys-surface-container-low);
+  font-size: 0.78rem;
 }
 
 .processes {
   grid-column: 1 / -1;
 
-  .empty-note {
-    opacity: 0.7;
-    font-size: 0.85rem;
-  }
 }
 
 .placeholder {

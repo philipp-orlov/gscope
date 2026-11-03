@@ -130,27 +130,19 @@
         <mat-card-title>Temperatures</mat-card-title>
       </mat-card-header>
       <mat-card-content>
-        <table
-          mat-table
-          class="compact-table"
-          [dataSource]="sortedTemperatures()"
-          matSort
-          matSortActive="celsius"
-          matSortDirection="desc"
-          matSortDisableClear
-          (matSortChange)="temperatureSort.set($event)"
-        >
-          <ng-container matColumnDef="name">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>Sensor</th>
-            <td mat-cell *matCellDef="let sensor">{{ sensor.name }}</td>
-          </ng-container>
-          <ng-container matColumnDef="celsius">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>&deg;C</th>
-            <td mat-cell *matCellDef="let sensor">{{ sensor.celsius | number: '1.0-1' }}</td>
-          </ng-container>
-          <tr mat-header-row *matHeaderRowDef="temperatureColumns"></tr>
-          <tr mat-row *matRowDef="let row; columns: temperatureColumns"></tr>
-        </table>
+        <ui-data-grid
+          class="compact-grid"
+          [data]="sample.temperatures"
+          [columns]="temperatureColumns"
+          [(sort)]="temperatureSort"
+          sortable="single"
+          [groupable]="false"
+          [reorderable]="false"
+          [columnMenu]="false"
+          [virtual]="false"
+          [rowHeight]="30"
+          emptyText="No sensors reported."
+        />
       </mat-card-content>
     </mat-card>
     }
@@ -165,38 +157,19 @@
         </mat-card-title>
       </mat-card-header>
       <mat-card-content>
-        <table
-          mat-table
-          class="compact-table"
-          [dataSource]="sortedProcesses()"
-          matSort
-          matSortActive="cpu"
-          matSortDirection="desc"
-          matSortDisableClear
-          (matSortChange)="processSort.set($event)"
-        >
-          <ng-container matColumnDef="pid">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>PID</th>
-            <td mat-cell *matCellDef="let process">{{ process.pid }}</td>
-          </ng-container>
-          <ng-container matColumnDef="name">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>Name</th>
-            <td mat-cell *matCellDef="let process">{{ process.name }}</td>
-          </ng-container>
-          <ng-container matColumnDef="cpu">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>CPU %</th>
-            <td mat-cell *matCellDef="let process">{{ process.cpu | number: '1.0-2' }}</td>
-          </ng-container>
-          <ng-container matColumnDef="memoryMb">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header>Memory</th>
-            <td mat-cell *matCellDef="let process">{{ process.memoryMb | binarySize }}</td>
-          </ng-container>
-          <tr mat-header-row *matHeaderRowDef="processColumns"></tr>
-          <tr mat-row *matRowDef="let row; columns: processColumns"></tr>
-        </table>
-        @if (sample.processes.length === 0) {
-          <p class="empty-note">No process data available.</p>
-        }
+        <ui-data-grid
+          class="compact-grid"
+          [data]="sample.processes"
+          [columns]="processColumns"
+          [(sort)]="processSort"
+          sortable="single"
+          [groupable]="false"
+          [reorderable]="false"
+          [columnMenu]="false"
+          [virtual]="false"
+          [rowHeight]="30"
+          emptyText="No process data available."
+        />
       </mat-card-content>
     </mat-card>
     }

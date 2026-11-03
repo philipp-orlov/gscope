@@ -43,7 +43,7 @@ One process, one port, no separate dev server or proxy.
 ### Single-file deployment (the default)
 
 For copying to a device as one artifact instead of a directory, `npm run
-build:single` folds the hashed JS bundle, CSS, and favicon that `ng build`
+build:single` folds the hashed JS bundle, CSS, fonts and favicon that `ng build`
 produces back into one dependency-free `index.html`
 (`frontend/dist/frontend/single/index.html`). Copied into
 `backend/public/index.html`, this is exactly what `gscope-daemon` embeds into
@@ -67,9 +67,10 @@ mkdir -p /path/to/public && cp dist/frontend/single/index.html /path/to/public/
 ./gscope-daemon --public-dir /path/to/public
 ```
 
-Only the Google Fonts stylesheets stay external (Roboto/Material Icons);
-everything else -- app JS, component styles, theme CSS, favicon -- lives
-inside that single HTML file.
+Nothing stays external: app JS, component styles, theme CSS, the Roboto and
+Material Icons fonts (bundled from npm, inlined as data URIs) and the favicon
+all live inside that single HTML file, so the dashboard works with no
+internet access.
 
 ## Design
 

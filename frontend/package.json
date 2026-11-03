@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
+    "kit": "node -e \"require('fs').rmSync('node_modules/@web-ui-kit',{recursive:true,force:true})\" && npm install",
     "start": "ng serve",
     "build": "ng build",
     "build:single": "ng build && node scripts/inline.mjs",
@@ -20,8 +21,10 @@
     "@angular/material": "^22.1.7",
     "@angular/platform-browser": "^22.1.0",
     "@angular/router": "^22.1.0",
-    "@ui-kit/angular": "file:../../web-ui-kit/angular/dist",
-    "@ui-kit/core": "file:../../web-ui-kit/core",
+    "@fontsource/roboto": "^5.3.0",
+    "@web-ui-kit/angular": "file:../../web-ui-kit/angular/dist",
+    "@web-ui-kit/core": "file:../../web-ui-kit/core",
+    "material-icons": "^1.13.14",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },

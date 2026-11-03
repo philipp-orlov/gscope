@@ -15,8 +15,6 @@ import {
   networkRxSeries,
   networkTotalBytesPerSec,
   networkTxSeries,
-  sortProcesses,
-  sortTemperatures,
   swapPercentSeries,
   temperatureSeries,
 } from './dashboard';
@@ -128,55 +126,6 @@ describe('tile header "now" readings', () => {
   });
 });
 
-describe('sortProcesses', () => {
-  const processes = [
-    { pid: 2, name: 'bravo', cpu: 5, memoryMb: 200 },
-    { pid: 1, name: 'alpha', cpu: 30, memoryMb: 50 },
-    { pid: 3, name: 'charlie', cpu: 15, memoryMb: 800 },
-  ];
-
-  it('sorts by CPU descending (the default)', () => {
-    const sorted = sortProcesses(processes, { active: 'cpu', direction: 'desc' });
-    expect(sorted.map((p) => p.pid)).toEqual([1, 3, 2]);
-  });
-
-  it('sorts by any column, either direction', () => {
-    expect(sortProcesses(processes, { active: 'name', direction: 'asc' }).map((p) => p.name)).toEqual([
-      'alpha',
-      'bravo',
-      'charlie',
-    ]);
-    expect(sortProcesses(processes, { active: 'memoryMb', direction: 'asc' }).map((p) => p.pid)).toEqual([
-      1, 2, 3,
-    ]);
-    expect(sortProcesses(processes, { active: 'pid', direction: 'desc' }).map((p) => p.pid)).toEqual([
-      3, 2, 1,
-    ]);
-  });
-
-  it('returns the input order unchanged when direction is cleared', () => {
-    expect(sortProcesses(processes, { active: 'cpu', direction: '' })).toBe(processes);
-  });
-});
-
-describe('sortTemperatures', () => {
-  const temperatures = [
-    { name: 'GPU', celsius: 50 },
-    { name: 'CPU', celsius: 65 },
-    { name: 'SOC0', celsius: 55 },
-  ];
-
-  it('sorts by celsius descending (the default)', () => {
-    const sorted = sortTemperatures(temperatures, { active: 'celsius', direction: 'desc' });
-    expect(sorted.map((t) => t.name)).toEqual(['CPU', 'SOC0', 'GPU']);
-  });
-
-  it('sorts by sensor name', () => {
-    const sorted = sortTemperatures(temperatures, { active: 'name', direction: 'asc' });
-    expect(sorted.map((t) => t.name)).toEqual(['CPU', 'GPU', 'SOC0']);
-  });
-});
-
 describe('Dashboard component', () => {
   it('renders a placeholder before the first sample arrives', () => {
     TestBed.configureTestingModule({
@@ -240,5 +189,64 @@ describe('Dashboard component', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('init');
     expect(text).toContain('Processes');
+  });
+
+  function create(sample: Sample) {
+    TestBed.configureTestingModule({
+      imports: [Dashboard],
+      providers: [
+        {
+          provide: MetricsService,
+          useValue: {
+            status: signal('open'),
+            latest: signal(sample),
+            systemInfo: signal(null),
+            history: signal([sample]),
+          },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(Dashboard);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  const processCard = (root: HTMLElement) => root.querySelector<HTMLElement>('.processes')!;
+  const cells = (card: HTMLElement, field: string) =>
+    Array.from(card.querySelectorAll<HTMLElement>(`tr.grid-row td[data-field="${field}"]`)).map((td) => td.textContent!.trim());
+
+  const busy = makeSample({
+    processes: [
+      { pid: 2, name: 'bravo', cpu: 5, memoryMb: 2048 },
+      { pid: 1, name: 'alpha', cpu: 30.456, memoryMb: 50 },
+      { pid: 3, name: 'charlie', cpu: 15, memoryMb: 800 },
+    ],
+  });
+
+  it('shows the processes busiest first, with formatted CPU and memory', async () => {
+    const fixture = create(busy);
+    await fixture.whenStable();
+    const card = processCard(fixture.nativeElement);
+    expect(cells(card, 'name')).toEqual(['alpha', 'charlie', 'bravo']);
+    expect(cells(card, 'cpu')).toEqual(['30.46', '15', '5']);
+    expect(cells(card, 'memoryMb')).toEqual(['50 MiB', '800 MiB', '2.00 GiB']);
+  });
+
+  it('sorts the processes by the header the user clicks', async () => {
+    const fixture = create(busy);
+    await fixture.whenStable();
+    const card = processCard(fixture.nativeElement);
+    card.querySelector<HTMLElement>('th[data-field="name"]')!.click();
+    await fixture.whenStable();
+    expect(cells(card, 'name')).toEqual(['alpha', 'bravo', 'charlie']);
+    card.querySelector<HTMLElement>('th[data-field="memoryMb"]')!.click();
+    await fixture.whenStable();
+    expect(cells(card, 'pid')).toEqual(['1', '3', '2']);
+  });
+
+  it('says so when there are no processes', async () => {
+    const fixture = create(makeSample({ processes: [] }));
+    await fixture.whenStable();
+    expect(processCard(fixture.nativeElement).textContent).toContain('No process data available.');
   });
 });

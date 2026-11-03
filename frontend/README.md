@@ -5,9 +5,11 @@ data over a WebSocket (`/ws/metrics`); no polling.
 
 ## Setup
 
-The charts and the size pipe come from the shared web-ui-kit (`../../web-ui-kit`: `@ui-kit/core` and
-`@ui-kit/angular`, `file:` dependencies). Build it first, and run `npm install` here again after
-every rebuild of the kit (`.npmrc` sets `install-links`, so npm copies it in):
+The charts, the process and temperature grids and the size pipe come from the shared web-ui-kit
+(`../../web-ui-kit`: `@web-ui-kit/core` and `@web-ui-kit/angular`, `file:` dependencies). Build it first,
+and run `npm run kit` here after every rebuild of the kit (`.npmrc` sets `install-links`, so npm copies
+it in; `npm run kit` removes the old copy first, since npm does not replace a copy of the same version).
+Fonts and icons (Roboto, Material Icons) are bundled from npm, so the dashboard needs no internet access.
 
 ```sh
 (cd ../../web-ui-kit/angular && npm install && npm run build)

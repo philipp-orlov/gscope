@@ -4,15 +4,15 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatSortModule, Sort } from '@angular/material/sort';
-import { MatTableModule } from '@angular/material/table';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { MetricsService } from '../core/metrics.service';
 import { ProcessSample, Sample, TemperatureSample } from '../models/metrics.model';
-import { SparklineChartComponent, SparklineSeries } from '@ui-kit/angular/charts';
-import { BinarySizePipe } from '@ui-kit/angular/utils';
+import { SparklineChartComponent, SparklineSeries } from '@web-ui-kit/angular/charts';
+import { DataGridComponent, GridColumn, SortDescriptor } from '@web-ui-kit/angular/data-grid';
+import { formatBinarySize } from '@web-ui-kit/core/format';
+import { BinarySizePipe } from '@web-ui-kit/angular/utils';
 
 // Pure data-shaping helpers, exported so they're testable without
 // rendering the component or touching a canvas.
@@ -115,35 +115,24 @@ export function networkTotalBytesPerSec(sample: Sample): number {
   return sample.network.rxBytesPerSec + sample.network.txBytesPerSec;
 }
 
-export function sortProcesses(processes: ProcessSample[], sort: Sort): ProcessSample[] {
-  if (!sort.direction) return processes;
-  const factor = sort.direction === 'asc' ? 1 : -1;
-  return [...processes].sort((a, b) => {
-    switch (sort.active) {
-      case 'pid':
-        return factor * (a.pid - b.pid);
-      case 'name':
-        return factor * a.name.localeCompare(b.name);
-      case 'memoryMb':
-        return factor * (a.memoryMb - b.memoryMb);
-      default:
-        return factor * (a.cpu - b.cpu);
-    }
-  });
-}
+// The columns of the Processes and Temperatures grids. The grid sorts the
+// rows itself (client mode); `value` stays numeric so that CPU and memory
+// sort as numbers, `text` is what a cell shows.
+const decimals = (max: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: max });
+const twoDecimals = decimals(2);
+const oneDecimal = decimals(1);
 
-export function sortTemperatures(temperatures: TemperatureSample[], sort: Sort): TemperatureSample[] {
-  if (!sort.direction) return temperatures;
-  const factor = sort.direction === 'asc' ? 1 : -1;
-  return [...temperatures].sort((a, b) => {
-    switch (sort.active) {
-      case 'name':
-        return factor * a.name.localeCompare(b.name);
-      default:
-        return factor * (a.celsius - b.celsius);
-    }
-  });
-}
+export const PROCESS_COLUMNS: GridColumn<ProcessSample>[] = [
+  { field: 'pid', title: 'PID', width: 72 },
+  { field: 'name', title: 'Name', width: 280 },
+  { field: 'cpu', title: 'CPU %', width: 80, text: (v) => twoDecimals.format(v as number) },
+  { field: 'memoryMb', title: 'Memory', width: 96, text: (v) => formatBinarySize(v as number) },
+];
+
+export const TEMPERATURE_COLUMNS: GridColumn<TemperatureSample>[] = [
+  { field: 'name', title: 'Sensor', width: 140 },
+  { field: 'celsius', title: '\u00B0C', width: 72, text: (v) => oneDecimal.format(v as number) },
+];
 
 const STATUS_LABELS: Record<string, string> = {
   connecting: 'Connecting…',
@@ -180,13 +169,12 @@ export const TILE_MENU_ITEMS: { tile: TileKey; label: string; shortcut: string }
   selector: 'gscope-dashboard',
   imports: [
     BinarySizePipe,
+    DataGridComponent,
     DecimalPipe,
     MatButtonModule,
     MatCardModule,
     MatIconModule,
     MatMenuModule,
-    MatSortModule,
-    MatTableModule,
     MatToolbarModule,
     MatTooltipModule,
     SparklineChartComponent,
@@ -219,16 +207,13 @@ export class Dashboard {
   readonly latest = this.metrics.latest;
   readonly systemInfo = this.metrics.systemInfo;
   readonly statusLabel = computed(() => STATUS_LABELS[this.status()] ?? this.status());
-  readonly processColumns = ['pid', 'name', 'cpu', 'memoryMb'];
-  readonly temperatureColumns = ['name', 'celsius'];
+  readonly processColumns = PROCESS_COLUMNS;
+  readonly temperatureColumns = TEMPERATURE_COLUMNS;
 
-  readonly processSort = signal<Sort>({ active: 'cpu', direction: 'desc' });
-  readonly temperatureSort = signal<Sort>({ active: 'celsius', direction: 'desc' });
-
-  readonly sortedProcesses = computed(() => sortProcesses(this.latest()?.processes ?? [], this.processSort()));
-  readonly sortedTemperatures = computed(() =>
-    sortTemperatures(this.latest()?.temperatures ?? [], this.temperatureSort()),
-  );
+  // Busiest and hottest first; the user can sort by any column (the grid
+  // keeps the choice while new samples arrive).
+  readonly processSort = signal<SortDescriptor[]>([{ field: 'cpu', dir: 'desc' }]);
+  readonly temperatureSort = signal<SortDescriptor[]>([{ field: 'celsius', dir: 'desc' }]);
 
   // Temperatures starts hidden -- it needs thermal_zone sysfs data most
   // machines don't expose (see backend README), so an empty table isn't a
