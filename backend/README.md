@@ -1,14 +1,16 @@
 # gscope backend
 
-A jetson_stats-style metrics server built on [libhttp](../../libhttp): samples
-CPU/GPU/memory/temperature on a background thread and serves them over REST
-and a WebSocket.
+A jetson_stats-style metrics server built on [libhttp](../../libhttp) and
+[librpc](../../librpc): samples CPU/GPU/memory/temperature on a background
+thread and streams them to the dashboards as librpc calls (binary libbufs
+messages) on one WebSocket route.
 
 ## Building
 
-Built from the top-level `gscope` CMake project, which adds a sibling `../libhttp`
-checkout (`-DGSCOPE_LIBHTTP_DIR=...` to point elsewhere) unless the `http` target
-already exists:
+Built from the top-level `gscope` CMake project, which adds sibling `../libhttp`,
+`../libcore` and `../librpc` checkouts (librpc brings `../libbufs`;
+`-DGSCOPE_LIBHTTP_DIR=...`, `-DGSCOPE_LIBCORE_DIR=...`, `-DGSCOPE_LIBRPC_DIR=...`
+to point elsewhere) unless their targets already exist:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -29,6 +31,7 @@ ctest --test-dir build -R gscope
 | `--history-size` | 120 | Samples buffered for a new client's backlog |
 | `--provider` | autodetect | Force `tegrastats`, `nvml`, `nvidia-smi` or `proc` |
 | `--public-dir` | *(embedded)* | Serve an on-disk Angular build instead of the copy built into the binary |
+| `--clients` | 16 | Dashboards that can watch at once (each open `Watch` stream holds one librpc worker) |
 | `--io-threads` | 2 | Reactor threads for the HTTP/WebSocket server (see `ServerConfig::ioThreads`); the library default is one per CPU core, overkill for the handful of clients a metrics dashboard serves |
 
 ### The embedded default UI
@@ -119,59 +122,52 @@ restarts the service, so it doubles as the upgrade path.
 
 ## Wire protocol
 
-`GET /api/system` -- static info:
-```json
-{"hostname": "...", "kernel": "Linux 5.10...", "provider": "tegrastats", "cpuCount": 8}
-```
+The metrics travel as [librpc](../../librpc) calls on the WebSocket route `/rpc`: one service, `Monitor`, whose
+schema is [include/gscope/wire/monitor.bufs](include/gscope/wire/monitor.bufs). `rpcc` writes the C++ server stub
+(at build time, `rpc_generate` in `CMakeLists.txt`) and the dashboard's TypeScript client
+(`frontend/scripts/vendor-librpc.mjs`). Messages are [libbufs](../../libbufs): binary, no field names, read in
+place.
 
-`GET /api/metrics/latest` -- the most recent sample (empty `{}` before the
-first reading). `GET /api/metrics/history` -- a JSON array of the buffered
-samples, oldest first. A sample:
-```json
-{
-  "timestamp": 1758500000000,
-  "cpu": {"cores": [{"utilization": 12.0, "frequencyMhz": 1984.0}, ...]},
-  "memory": {"usedMb": 4461, "totalMb": 15524, "swapUsedMb": 34, "swapTotalMb": 7762},
-  "gpus": [{"name": "GPU0", "utilization": 0.0, "memoryUsedMb": 4461, "memoryTotalMb": 15524,
-            "temperatureC": 50.7, "powerMw": -1, "frequencyMhz": 0}],
-  "processes": [{"pid": 1234, "name": "chrome", "cpu": 5.2, "memoryMb": 214.0}, ...],
-  "network": {"rxBytesPerSec": 125000.0, "txBytesPerSec": 8200.0},
-  "temperatures": [{"name": "CPU", "celsius": 52.75}, ...]
+```
+rpc_service Monitor {
+    Watch():stream Update;
 }
 ```
-`temperatureC`/`powerMw` of `-1000`/`-1` mean "sensor not available". Percent
-fields (`cpu.cores[].utilization`, `gpus[].utilization`, `processes[].cpu`)
-are rounded to 2 decimal places once in `json_codec.cpp`, the single place a
-`Sample` becomes JSON -- every consumer (REST, WS backlog, live broadcast)
-sees the same rounded value. `temperatures` comes from
-`/sys/class/thermal/thermal_zone*` (generic Linux sensor framework, e.g.
-`"acpitz 0"`) via `ProcCpuMemSampler`, so it's populated regardless of which
-GPU provider is active -- tegrastats supplies its own CPU/GPU readings from
-tegrastats' own text output instead. Empty if the machine/container exposes
-no thermal zones.
-`processes` is the top 8 by CPU% (`gscope::ProcessSampler`, `/proc`-based --
-available regardless of which `MetricsProvider` is active), `cpu` relative
-to one core the way `top`/`ps` report it (so a multi-threaded process can
-read over 100%). `network` (`gscope::NetworkSampler`, also `/proc`-based) sums
-every interface except loopback.
 
-`GET /ws/metrics` (WebSocket) -- on connect, one backlog message:
-```json
-{"type": "history", "samples": [ <sample>, ... ], "buildId": "e3d5027cbda71af3"}
-```
-then one message per new reading:
-```json
-{"type": "sample", "sample": <sample>, "buildId": "e3d5027cbda71af3"}
-```
-`buildId` is a fingerprint (name+size+mtime) of `--public-dir`'s files,
-recomputed at most once every 5s. The frontend (`MetricsService`) remembers
-the first one it sees and calls `location.reload()` the moment a later
-message carries a different one -- so redeploying the Angular build while a
-tab is open gets picked up automatically, no manual refresh needed. `/` and
-`/index.html` are served with `Cache-Control: no-cache` (unlike the
-content-hashed JS/CSS, which keep the default long-lived caching) precisely
-so that reload actually fetches the new `index.html` rather than a cached
-stale one.
+`Watch` streams `Update`s until the client cancels:
+
+* The first update carries the `Inventory` and the backlog (`--history-size` samples, oldest first). A long backlog
+  continues in further updates of 512 samples, so no message comes near librpc's 16 MiB limit.
+* Every later update carries the newest sample. The inventory comes again only when something in it changed, a
+  redeployed frontend included.
+
+What changes rarely is the `Inventory`: hostname, kernel, provider, CPU count, `build_id`, memory and swap totals,
+GPU names and memory, sensor names. A `Sample` holds numbers only, fixed point at the precision the dashboard shows:
+
+| Field | Unit |
+|---|---|
+| `cores[]` | struct: utilization in 0.01 %, MHz |
+| `gpus[]` | struct, at the index of `Inventory.gpus`: utilization in 0.01 %, used MiB, temperature in 0.1 degC (`-32768` = no sensor), power mW (`-1` = not available), MHz |
+| `temperatures_deci[]` | 0.1 degC, at the index of `Inventory.sensors` (`-32768` = no reading) |
+| `processes[]` | the top processes by CPU (`gscope::ProcessSampler`, `/proc`): pid, name, CPU in 0.01 % of one core (a multi-threaded process reads over 100 %), resident KiB |
+| memory, swap | used MiB |
+| `rx_bytes_per_sec`, `tx_bytes_per_sec` | every interface but loopback (`gscope::NetworkSampler`) |
+
+`wire_codec.cpp` is the one place a `Sample` becomes a message. Each sample is encoded once, and the same bytes go to
+every watcher (`MetricsService`). On a 20-core machine with one GPU, eight sensors and ten processes, a live update is
+about 750 bytes, where the JSON this replaced was about 2,100; most of what is left is process names.
+
+Each open dashboard holds one endpoint worker for its `Watch` call (`--clients`, default 16). A dashboard that falls
+64 updates behind (a sleeping tab, a slow link) is ended with `ResourceExhausted`. It reconnects with backoff and
+starts again from the backlog.
+
+`build_id` is a fingerprint (name+size+mtime) of `--public-dir`'s files, recomputed at most once every 5 s. The
+frontend (`MetricsService`) remembers the first one it sees and calls `location.reload()` when a later inventory
+carries a different one. A frontend redeployed while a tab is open is picked up without a manual refresh. `/` and
+`/index.html` are served with `Cache-Control: no-cache` (unlike the content-hashed JS/CSS, which keep the default
+long-lived caching), so the reload fetches the new `index.html` and not a cached one.
+
+`GET /health` answers `ok`, for probes. There is no JSON API.
 
 ## Tests
 
@@ -189,7 +185,10 @@ stale one.
 | `gscope_network_sampler` | `/proc/net/dev` parsing, loopback exclusion, and a light integration check against the real `/proc` |
 | `gscope_frontend_version` | Directory fingerprint changes with content/mtime, stable when unchanged, `"0"` for a missing/empty directory |
 | `gscope_history_buffer` | Ring buffer capacity and eviction order |
-| `gscope_metrics_service` | End-to-end with a fake provider and a `WebSocketConnection` bound to in-memory send/post functions: history backlog, live broadcast, eviction, and `buildId` changing when the (temp-dir) deploy changes |
+| `gscope_wire_codec` | Fixed-point conversion and clamping, the inventory, sensors matched by name, an update with and without the inventory |
+| `gscope_metrics_service` | With a fake provider: the first update (inventory, backlog), the inventory only when it changes, one encoding shared by all watchers, eviction, a slow watcher closed, `stop()` waking watchers, the backlog in chunks, `build_id` changing when the (temp-dir) deploy changes |
+| `gscope_monitor_rpc` | `Monitor.Watch` over a real WebSocket with a librpc client: backlog, a live update, cancel releasing the watcher, `stop()` ending the stream |
+| `gscope_frontend_wire_up_to_date` | The frontend's generated `monitor.bufs.ts` and its vendored librpc runtime match their sources (needs `node`) |
 
 Providers that spawn a subprocess (tegrastats, nvidia-smi) take an
 injectable `LineStreamFactory` (`include/gscope/line_stream.hpp`) so their read

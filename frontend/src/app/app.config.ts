@@ -1,4 +1,3 @@
-import { provideHttpClient } from '@angular/common/http';
 import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
 
 // No @angular/animations/provideAnimationsAsync(): Material 3's theming is
@@ -6,5 +5,5 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/
 // project -- pulling in the (now deprecated) animations engine here would
 // only add weight without changing how anything looks.
 export const appConfig: ApplicationConfig = {
-  providers: [provideBrowserGlobalErrorListeners(), provideHttpClient()],
+  providers: [provideBrowserGlobalErrorListeners()],
 };

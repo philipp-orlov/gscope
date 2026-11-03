@@ -2,28 +2,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // gscope backend: a jetson_stats-style system monitor, served over
-// HTTP/WebSocket instead of a terminal UI. See ../README.md for the wire
-// protocol and how this pairs with the Angular frontend.
-#include <charconv>
+// HTTP/WebSocket instead of a terminal UI. The metrics travel as librpc
+// calls (include/gscope/wire/monitor.bufs) on /rpc; see README.md.
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <unistd.h>
-#include <sys/utsname.h>
 
 #include "cfg/cfg.hpp"
-#include "http/logger.hpp"
-#include "hw/log.hpp"
-#include "http/server.hpp"
 #include "gscope/metrics_service.hpp"
+#include "gscope/monitor_rpc.hpp"
 #include "gscope/provider.hpp"
-#include "json/json.hpp"
+#include "http/logger.hpp"
+#include "http/server.hpp"
+#include "hw/log.hpp"
+#include "rpc/server.hpp"
 
 using namespace http;
-using json::Json;
 
 #ifdef GSCOPE_EMBEDDED_INDEX_HTML
 // Defined by objcopy (see CMakeLists.txt) from public/index.html; not real
@@ -40,22 +38,6 @@ volatile std::sig_atomic_t stopRequested = 0;
 void handleSignal(int)
 {
     stopRequested = 1;
-}
-
-std::string hostName()
-{
-    char buffer[256] = {0};
-    if (gethostname(buffer, sizeof(buffer) - 1) != 0)
-        return "unknown";
-    return buffer;
-}
-
-std::string kernelRelease()
-{
-    struct utsname info;
-    if (uname(&info) != 0)
-        return "unknown";
-    return std::string(info.sysname) + " " + info.release;
 }
 
 }  // namespace
@@ -78,6 +60,8 @@ try {
     cfg::Schema options;
     uint16_t port = 8081;
     unsigned ioThreads = 2;
+    // Each open dashboard holds one endpoint worker for its Watch stream.
+    unsigned clients = 16;
     bool help = false;
     options.addInt(port, "port", port, uint16_t{1}, uint16_t{65535}, "listen port");
     options.addInt(intervalMs, "interval-ms", intervalMs, 100u, 3600000u, "sampling interval");
@@ -85,6 +69,7 @@ try {
     options.addString(forcedProvider, "provider", "", "tegrastats|nvml|nvidia-smi|proc (default: detect)");
     options.addString(publicDir, "public-dir", publicDir, "serve the UI from disk instead of the embedded copy");
     options.addInt(ioThreads, "io-threads", ioThreads, 1u, 256u, "reactor threads");
+    options.addInt(clients, "clients", clients, 1u, 1024u, "dashboards that can watch at once");
     options.addBool(help, "help", false, "show this text");
     if (auto status = options.fromArgv(argc, argv); !status.ok())
         throw std::invalid_argument(std::string(status.message()));
@@ -117,35 +102,14 @@ try {
     std::signal(SIGINT, handleSignal);
     std::signal(SIGTERM, handleSignal);
 
-    server.onGet("/health", [](HttpContext& context) { context.json(Json{{"status", "ok"}}); });
+    server.onGet("/health", [](HttpContext& context) { context.text("ok"); });
 
-    server.onGet("/api/system", [&metrics](HttpContext& context) {
-        context.json(Json{
-            {"hostname", hostName()},
-            {"kernel", kernelRelease()},
-            {"provider", metrics.providerName()},
-            {"cpuCount", static_cast<long long>(sysconf(_SC_NPROCESSORS_ONLN))},
-        });
-    });
-
-    server.onGet("/api/metrics/latest", [&metrics](HttpContext& context) {
-        std::string body = metrics.latestJson();
-        context.text(body, "application/json");
-    });
-
-    server.onGet("/api/metrics/history", [&metrics](HttpContext& context) {
-        std::string body = metrics.historyJson();
-        context.text(body, "application/json");
-    });
-
-    server.onWebSocket("/ws/metrics", [&metrics](std::shared_ptr<WebSocketConnection> connection) {
-        HTTP_LOG_INFO("client connected (%s)", connection->remoteAddress().c_str());
-        metrics.addSubscriber(connection);
-        std::string remoteAddress = connection->remoteAddress();
-        connection->onClose([remoteAddress]() {
-            HTTP_LOG_INFO("client disconnected (%s)", remoteAddress.c_str());
-        });
-    });
+    // The metrics: one librpc service (Monitor.Watch) on /rpc. A dashboard
+    // past --clients waits for a worker, then is refused (Unavailable) and
+    // retries with backoff.
+    gscope::MonitorRpc monitor(metrics);
+    rpc::Endpoint endpoint(rpc::EndpointOptions().workers(clients).queueCapacity(clients));
+    endpoint.add(monitor).attach(server, "/rpc");
 
     // index.html's own filename never changes across a redeploy (unlike
     // the content-hashed JS/CSS it references), so it must not be cached
@@ -193,7 +157,10 @@ try {
 #endif
 
     server.run([] { return stopRequested != 0; });
+    // Closing the watchers ends every Watch stream at once, so the endpoint
+    // has nothing left to wait for.
     metrics.stop();
+    endpoint.shutdown(std::chrono::seconds(2));
     Logger::instance().flush();
     return 0;
 } catch (const std::exception& error) {

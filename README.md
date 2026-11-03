@@ -2,8 +2,9 @@
 
 A [jetson_stats](https://github.com/rbonghi/jetson_stats)-style system
 monitor with a web UI instead of a terminal one: a C++ backend (built on
-[libhttp](../libhttp)) samples CPU/GPU/memory/temperature and pushes updates over
-a WebSocket; an Angular + Angular Material frontend renders them as a live
+[libhttp](../libhttp) and [librpc](../librpc)) samples CPU/GPU/memory/temperature
+and streams updates as librpc calls (binary [libbufs](../libbufs) messages) over
+one WebSocket; an Angular + Angular Material frontend renders them as a live
 dashboard.
 
 ```
@@ -21,7 +22,7 @@ Two processes, one proxying to the other:
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target gscope-daemon
 ./build/backend/gscope-daemon --port 8081
 
-# Terminal 2 -- the frontend dev server, proxying /api and /ws to 8081
+# Terminal 2 -- the frontend dev server, proxying the /rpc WebSocket to 8081
 cd frontend
 npm install
 npm start   # ng serve; see frontend/proxy.conf.json
@@ -81,10 +82,12 @@ internet access.
   load, and falls back again to a `/proc`-only reading (CPU/RAM, no GPU) if
   none of those are present -- the same ladder nvtop/btop use. See
   `backend/include/gscope/provider.hpp`.
-- **One JSON schema, three uses.** A `Sample` becomes JSON once
-  (`json_codec.cpp`) and that same text is what the REST endpoints return,
-  what's buffered for the "history" backlog a new WebSocket client gets, and
-  what's broadcast live -- never re-encoded per connection.
+- **Little traffic.** One librpc service (`backend/include/gscope/wire/monitor.bufs`):
+  a dashboard's `Watch` call gets the backlog and then one binary update per
+  sample, fixed-point numbers only. Names and totals (GPUs, sensors, the
+  host) travel in an inventory that is sent again only when it changes. A
+  sample is encoded once (`wire_codec.cpp`) and the same bytes go to every
+  dashboard -- about 750 bytes an update where the JSON was about 2,100.
 - **Lightweight by construction.** The backend samples on the provider's own
   cadence and pushes only on change; the frontend's chart redraws only when
   new data arrives (no `requestAnimationFrame` loop ticking on an idle tab).

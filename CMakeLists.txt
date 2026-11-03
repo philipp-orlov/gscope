@@ -1,7 +1,10 @@
 # gscope: a jetson_stats-style system monitor served over HTTP/WebSocket,
-# built on libhttp. The Angular frontend is built separately (npm).
+# built on libhttp; the metrics travel as librpc calls (libbufs messages).
+# The Angular frontend is built separately (npm).
 
-cmake_minimum_required(VERSION 3.15)
+# 3.16: librpc needs it. The range turns on the newer policies (CMP0116, for
+# the DEPFILEs of rpcc and bufsc) where CMake has them.
+cmake_minimum_required(VERSION 3.16...3.28)
 project(gscope LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -28,6 +31,17 @@ if(NOT TARGET http)
     set(HTTP_BUILD_EXAMPLES OFF CACHE BOOL "")
     set(HTTP_BUILD_TESTS OFF CACHE BOOL "")
     add_subdirectory("${GSCOPE_LIBHTTP_DIR}" libhttp)
+endif()
+
+# librpc carries the metrics (backend/include/gscope/wire/monitor.bufs): its
+# rpcc writes the C++ server stub and the frontend's TypeScript client. A
+# sibling checkout by default; it brings libbufs along and reuses the
+# libhttp and libcore above.
+set(GSCOPE_LIBRPC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../librpc" CACHE PATH "Path to a librpc checkout")
+if(NOT TARGET rpc)
+    set(RPC_BUILD_TESTS OFF CACHE BOOL "")
+    set(RPC_BUILD_EXAMPLES OFF CACHE BOOL "")
+    add_subdirectory("${GSCOPE_LIBRPC_DIR}" librpc)
 endif()
 
 add_subdirectory(backend)

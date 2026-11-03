@@ -4,6 +4,7 @@
 #include "gscope/history_buffer.hpp"
 
 #include <cstdio>
+#include <string>
 
 namespace {
 void check(bool condition, const char* what)
@@ -17,7 +18,7 @@ void check(bool condition, const char* what)
 
 int main()
 {
-    gscope::HistoryBuffer buffer(3);
+    gscope::HistoryBuffer<std::string> buffer(3);
     check(buffer.empty(), "starts empty");
 
     buffer.push("a");
@@ -36,7 +37,7 @@ int main()
         check((snapshot == std::vector<std::string>{"b", "c", "d"}), "oldest evicted first");
     }
 
-    gscope::HistoryBuffer zeroCapacity(0);
+    gscope::HistoryBuffer<std::string> zeroCapacity(0);
     zeroCapacity.push("x");
     check(zeroCapacity.empty(), "zero-capacity buffer never holds anything");
 

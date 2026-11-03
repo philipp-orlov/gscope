@@ -1,5 +1,7 @@
-// Wire schema shared with the backend (see backend/README.md). Kept as
-// plain interfaces -- these are DTOs, not behavior.
+// The dashboard's view of a reading. The wire format is
+// backend/include/gscope/wire/monitor.bufs (librpc + libbufs);
+// core/metrics-decoder.ts turns its updates into these. Plain interfaces --
+// DTOs, not behavior.
 
 export interface CpuCoreSample {
   utilization: number; // 0..100
@@ -56,9 +58,5 @@ export interface SystemInfo {
   provider: string;
   cpuCount: number;
 }
-
-export type WireMessage =
-  | { type: 'history'; samples: Sample[]; buildId?: string }
-  | { type: 'sample'; sample: Sample; buildId?: string };
 
 export type ConnectionStatus = 'connecting' | 'open' | 'closed';

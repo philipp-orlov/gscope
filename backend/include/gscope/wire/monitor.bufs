@@ -1,0 +1,80 @@
+/// gscope's wire protocol: one librpc service, Monitor, on the daemon's WebSocket route /rpc. rpcc makes the C++
+/// server stub and the TypeScript client of the dashboard from this file.
+///
+/// Built to keep the traffic small, since a dashboard watches for hours:
+///   * Messages are libbufs: no field names on the wire, nothing to parse.
+///   * What rarely changes (host, provider, build, GPU names and memory, sensor names, memory totals) is the
+///     Inventory, sent in the first update and again only when it changes. A regular update is numbers.
+///   * Readings are fixed-point structs at the precision the dashboard shows: hundredths of a percent, tenths of a
+///     degree, MiB and KiB.
+///   * Each sample is encoded once and the same bytes go to every watcher.
+namespace gscope.wire;
+
+/// One CPU core in a sample.
+struct Core {
+    utilization_centi:ushort;   // 0.01 %: 0..10000
+    frequency_mhz:ushort;       // 0 when unknown
+}
+
+/// One GPU in a sample, at the index of its GpuInfo in the Inventory.
+struct Gpu {
+    memory_used_mib:uint;
+    power_mw:int;               // -1: not available
+    utilization_centi:ushort;   // 0.01 %
+    frequency_mhz:ushort;
+    temperature_deci:short;     // 0.1 degC; NO_TEMPERATURE: no sensor
+}
+
+/// One of the top processes by CPU.
+table Process {
+    pid:int;
+    cpu_centi:uint;             // 0.01 % of one core; above 10000 for a process on several cores
+    memory_kib:uint;            // resident set
+    name:string;
+}
+
+/// One reading of the machine.
+table Sample {
+    timestamp_ms:long;          // Unix time
+    mem_used_mib:uint;
+    swap_used_mib:uint;
+    rx_bytes_per_sec:ulong;
+    tx_bytes_per_sec:ulong;
+    cores:[Core];
+    gpus:[Gpu];
+    temperatures_deci:[short];  // 0.1 degC, at the index of Inventory.sensors
+    processes:[Process];
+}
+
+table GpuInfo {
+    name:string;
+    memory_total_mib:uint;
+}
+
+/// What a sample's numbers refer to, and the daemon's identity.
+table Inventory {
+    hostname:string;
+    kernel:string;
+    provider:string;            // tegrastats, nvml, nvidia-smi or proc
+    cpu_count:uint;
+    /// A fingerprint of the served frontend; a page that sees it change reloads itself.
+    build_id:string;
+    mem_total_mib:uint;
+    swap_total_mib:uint;
+    gpus:[GpuInfo];
+    sensors:[string];
+}
+
+/// An item of Watch.
+table Update {
+    /// Set in the first update, then only when something in it changed.
+    inventory:Inventory;
+    /// The first update holds the backlog, oldest first; every later one the newest sample.
+    samples:[Sample];
+}
+
+rpc_service Monitor {
+    /// The backlog, then one update per sample, until the client cancels. A client that falls far behind is ended
+    /// with ResourceExhausted; it reconnects and starts again from the backlog.
+    Watch():stream Update;
+}

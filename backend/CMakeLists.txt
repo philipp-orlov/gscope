@@ -1,18 +1,25 @@
-# gscope backend: a jetson_stats-style system monitor built on libhttp.
-# Wired in from ../CMakeLists.txt.
+# gscope backend: a jetson_stats-style system monitor built on libhttp and
+# librpc. Wired in from ../CMakeLists.txt.
 
 add_library(gscope_core STATIC
     src/frontend_version.cpp
-    src/json_codec.cpp
+    src/host_info.cpp
     src/metrics_service.cpp
+    src/monitor_rpc.cpp
+    src/wire_codec.cpp
 )
 target_include_directories(gscope_core PUBLIC include)
+# monitor.bufs.hpp and monitor.rpc.hpp (the messages and the Monitor service
+# base) into the build tree; links rpc::rpc.
+rpc_generate(gscope_core SCHEMAS ${CMAKE_CURRENT_SOURCE_DIR}/include/gscope/wire/monitor.bufs)
+# gscope's own headers include them, so the daemon and the tests see them too.
+target_include_directories(gscope_core PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/rpc_generated/gscope_core")
 # NvmlProvider loads libnvidia-ml.so.1 via dlopen/dlsym at runtime instead of
 # link-time (see include/gscope/nvml_provider.hpp) -- CMAKE_DL_LIBS is the
 # portable way to pull in dlopen()/dlsym() (a no-op on glibc >= 2.34, where
 # they live in libc itself; -ldl on older glibc). This never requires NVML
 # to actually be present, so it doesn't affect Jetson builds.
-target_link_libraries(gscope_core PUBLIC http core::sys core::cfg core::hw ${CMAKE_DL_LIBS})
+target_link_libraries(gscope_core PUBLIC http rpc::rpc core::sys core::cfg core::hw ${CMAKE_DL_LIBS})
 target_compile_options(gscope_core PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -O2>
 )
@@ -134,6 +141,24 @@ if(GSCOPE_BUILD_TESTS AND BUILD_TESTING)
     add_executable(gscope_test_frontend_version tests/test_frontend_version.cpp)
     target_link_libraries(gscope_test_frontend_version PRIVATE gscope_core)
     add_test(NAME gscope_frontend_version COMMAND gscope_test_frontend_version)
+
+    add_executable(gscope_test_wire_codec tests/test_wire_codec.cpp)
+    target_link_libraries(gscope_test_wire_codec PRIVATE gscope_core)
+    add_test(NAME gscope_wire_codec COMMAND gscope_test_wire_codec)
+
+    add_executable(gscope_test_monitor_rpc tests/test_monitor_rpc.cpp)
+    target_link_libraries(gscope_test_monitor_rpc PRIVATE gscope_core)
+    add_test(NAME gscope_monitor_rpc COMMAND gscope_test_monitor_rpc)
+    set_tests_properties(gscope_monitor_rpc PROPERTIES TIMEOUT 30)
+
+    # The frontend's TypeScript generated from monitor.bufs and its vendored
+    # librpc runtime match their sources (frontend/scripts/vendor-librpc.mjs).
+    find_program(GSCOPE_NODE node)
+    if(GSCOPE_NODE)
+        add_test(NAME gscope_frontend_wire_up_to_date
+                 COMMAND ${GSCOPE_NODE} scripts/vendor-librpc.mjs $<TARGET_FILE:rpcc> --check
+                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../frontend)
+    endif()
 
     add_executable(gscope_test_history_buffer tests/test_history_buffer.cpp)
     target_link_libraries(gscope_test_history_buffer PRIVATE gscope_core)

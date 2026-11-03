@@ -1,30 +1,32 @@
-import { HttpClient } from '@angular/common/http';
 import { Injectable, OnDestroy, inject, signal } from '@angular/core';
 
-import { WEBSOCKET_FACTORY, WebSocketLike } from './websocket-factory';
-import { ConnectionStatus, Sample, SystemInfo, WireMessage } from '../models/metrics.model';
+import { MetricsDecoder } from './metrics-decoder';
+import { MONITOR_CONNECT, MonitorConnection } from './monitor-connection';
+import { ConnectionStatus, Sample, SystemInfo } from '../models/metrics.model';
 
-const HISTORY_CAPACITY = 120;
+export const HISTORY_CAPACITY = 120;
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;
 
-// Owns the live WebSocket connection to /ws/metrics: buffers the last
+// Owns the live connection to the daemon: one librpc call, Monitor.Watch on
+// /rpc, whose first update brings the backlog and the inventory (host, GPU
+// and sensor names) and every later one a sample. Buffers the last
 // HISTORY_CAPACITY samples for the charts, exposes the latest one for the
-// numeric readouts, and reconnects with exponential backoff if the
-// connection drops (the backend restarting, Wi-Fi hiccup, etc).
+// numeric readouts, and reconnects with exponential backoff if the call ends
+// (the backend restarting, Wi-Fi hiccup, a too slow tab).
 @Injectable({ providedIn: 'root' })
 export class MetricsService implements OnDestroy {
-  private readonly http = inject(HttpClient);
-  private readonly createWebSocket = inject(WEBSOCKET_FACTORY);
+  private readonly connect = inject(MONITOR_CONNECT);
+  private readonly decoder = new MetricsDecoder();
 
-  private socket?: WebSocketLike;
+  private connection: MonitorConnection | null = null;
   private reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
+  private wake: (() => void) | null = null;
   private destroyed = false;
-  // Set from the first message's buildId; a later message with a
-  // different one means the backend is now serving a redeployed frontend
-  // build (see backend/README.md's "buildId" wire field) -- reload to get
-  // its fresh JS/CSS rather than keep running the stale one.
+  // Set from the first inventory's build_id; a later one that differs means
+  // the backend now serves a redeployed frontend -- reload to get its fresh
+  // JS/CSS rather than keep running the stale one.
   private knownBuildId: string | null = null;
 
   readonly status = signal<ConnectionStatus>('connecting');
@@ -33,85 +35,86 @@ export class MetricsService implements OnDestroy {
   readonly systemInfo = signal<SystemInfo | null>(null);
 
   constructor() {
-    this.fetchSystemInfo();
-    this.connect();
+    void this.run();
   }
 
   ngOnDestroy(): void {
     this.destroyed = true;
     clearTimeout(this.reconnectTimer);
-    this.socket?.close();
+    this.wake?.();
+    this.connection?.close();
   }
 
-  private fetchSystemInfo(): void {
-    this.http.get<SystemInfo>('/api/system').subscribe({
-      next: (info) => this.systemInfo.set(info),
-      // System info is a nice-to-have header, not on the critical path --
-      // a fetch failure shouldn't stop the live metrics from working.
-      error: () => undefined,
+  private url(): string {
+    const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${protocol}://${location.host}/rpc`;
+  }
+
+  private async run(): Promise<void> {
+    while (!this.destroyed) {
+      this.status.set('connecting');
+      try {
+        this.connection = await this.connect(this.url());
+        if (this.destroyed) break;
+        this.decoder.reset();
+        let first = true;
+        for await (const update of this.connection.updates) {
+          if (this.handle(update, first)) return;
+          if (first) {
+            first = false;
+            this.status.set('open');
+            this.reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
+          }
+        }
+      } catch {
+        // connection refused or lost: retry below
+      } finally {
+        this.connection?.close();
+        this.connection = null;
+      }
+      if (this.destroyed) break;
+      this.status.set('closed');
+      await this.sleep(this.reconnectDelayMs);
+      this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
+    }
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      this.wake = resolve;
+      this.reconnectTimer = setTimeout(resolve, ms);
     });
   }
 
-  private connect(): void {
-    if (this.destroyed) return;
-
-    const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-    this.socket = this.createWebSocket(`${protocol}://${location.host}/ws/metrics`);
-    this.status.set('connecting');
-
-    this.socket.onopen = () => {
-      this.status.set('open');
-      this.reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
-    };
-    this.socket.onmessage = (event: MessageEvent) => this.handleMessage(event.data);
-    this.socket.onclose = () => {
-      this.status.set('closed');
-      this.scheduleReconnect();
-    };
-    this.socket.onerror = () => this.socket?.close();
-  }
-
-  private scheduleReconnect(): void {
-    if (this.destroyed) return;
-    clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = setTimeout(() => this.connect(), this.reconnectDelayMs);
-    this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
-  }
-
-  private handleMessage(raw: string): void {
-    let message: WireMessage;
-    try {
-      message = JSON.parse(raw) as WireMessage;
-    } catch {
-      return; // malformed frame; drop it rather than crash the dashboard
-    }
-
-    if (message.buildId && this.checkBuildId(message.buildId)) return;
-
-    if (message.type === 'history') {
-      const samples = message.samples.slice(-HISTORY_CAPACITY);
-      this.history.set(samples);
-      if (samples.length > 0) this.latest.set(samples[samples.length - 1]);
-    } else if (message.type === 'sample') {
-      this.latest.set(message.sample);
+  /** True when the page reloads (a new frontend build): stop here. */
+  private handle(update: Parameters<MetricsDecoder['apply']>[0], first: boolean): boolean {
+    const decoded = this.decoder.apply(update);
+    if (decoded.system) this.systemInfo.set(decoded.system);
+    if (decoded.buildId !== null && this.checkBuildId(decoded.buildId)) return true;
+    if (decoded.samples.length > 0) {
+      // The first update of a connection starts the history afresh (the
+      // backlog); the rest of a long backlog and every live update append.
       this.history.update((existing) => {
-        const next = [...existing, message.sample];
+        const next = first ? decoded.samples : [...existing, ...decoded.samples];
         return next.length > HISTORY_CAPACITY ? next.slice(next.length - HISTORY_CAPACITY) : next;
       });
+      this.latest.set(decoded.samples[decoded.samples.length - 1]);
+    } else if (first) {
+      this.history.set([]);
     }
+    return false;
   }
 
-  // Returns true if the server just reported a different frontend build
-  // than the one this page loaded with -- and reloads to fetch it. False
-  // (including on the very first message, which only sets the baseline)
-  // means the caller should keep processing the message as normal.
+  // True if the server reports a different frontend build than the one this
+  // page loaded with -- and reloads to fetch it. The first build_id only sets
+  // the baseline (also across reconnects, so a restart of the same build does
+  // not reload).
   private checkBuildId(buildId: string): boolean {
     if (this.knownBuildId === null) {
       this.knownBuildId = buildId;
       return false;
     }
     if (buildId === this.knownBuildId) return false;
-
     location.reload();
     return true;
   }
