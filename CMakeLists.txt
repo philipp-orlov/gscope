@@ -19,7 +19,7 @@ endif()
 
 # libcore: a sibling checkout by default; ignored when the including project already provides the targets.
 set(GSCOPE_LIBCORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../libcore" CACHE PATH "Path to a libcore checkout")
-if(NOT TARGET develop::sys)
+if(NOT TARGET core::sys)
     set(DEVELOP_BUILD_TESTS OFF CACHE BOOL "")
     add_subdirectory("${GSCOPE_LIBCORE_DIR}" libcore)
 endif()
