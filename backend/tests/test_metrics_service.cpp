@@ -141,14 +141,17 @@ int main()
         check(!firstBuildId.empty() && firstBuildId != "0", "build_id reflects the directory");
 
         p->emit(makeSample(5.0));
-        auto first = read(*s.watcher->next());
+        // Keep each message while its reader is in use: a reader points into it.
+        gscope::UpdateMessage message = s.watcher->next();
+        auto first = read(*message);
         check(first.inventory() && first.inventory().buildId() == firstBuildId, "unchanged deploy: same build_id");
         p->emit(makeSample(5.0));
         check(!read(*s.watcher->next()).inventory(), "and no inventory while nothing changes");
 
         { std::ofstream(dir / "index.html") << "v2 - different length entirely"; }
         p->emit(makeSample(6.0));
-        auto changed = read(*s.watcher->next());
+        message = s.watcher->next();
+        auto changed = read(*message);
         check(changed.inventory() && changed.inventory().buildId() != firstBuildId,
               "redeployed frontend: the inventory comes again with the new build_id");
         versioned.stop();
