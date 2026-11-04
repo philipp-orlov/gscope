@@ -56,8 +56,10 @@ void Watcher::offer(const UpdateMessage& update)
 }
 
 MetricsService::MetricsService(std::unique_ptr<MetricsProvider> provider, size_t historyCapacity,
-                               std::string publicDir, std::chrono::seconds buildIdCheckInterval, HostInfo host)
+                               std::string publicDir, std::chrono::seconds buildIdCheckInterval, HostInfo host,
+                               std::string fixedBuildId)
     : provider_(std::move(provider)), host_(std::move(host)), publicDir_(std::move(publicDir)),
+      fixedBuildId_(std::move(fixedBuildId)),
       buildIdCheckInterval_(buildIdCheckInterval), history_(historyCapacity)
 {
     // Before the first sample a watcher still learns who it talks to.
@@ -139,8 +141,18 @@ Inventory MetricsService::inventory() const
 void MetricsService::onSample(const Sample& sample)
 {
     Sample enriched = sample;
-    enriched.processes = processSampler_.sample();
-    enriched.network = networkSampler_.sample();
+    const auto now = std::chrono::steady_clock::now();
+    if (watcherCount() == 0 && lastScan_ != std::chrono::steady_clock::time_point{} &&
+        now - lastScan_ < kIdleScanInterval) {
+        enriched.processes = lastProcesses_;
+        enriched.network = lastNetwork_;
+    } else {
+        enriched.processes = processSampler_.sample();
+        enriched.network = networkSampler_.sample();
+        lastProcesses_ = enriched.processes;
+        lastNetwork_ = enriched.network;
+        lastScan_ = now;
+    }
     Inventory inventory = inventoryOf(enriched, host_, provider_->name(), currentBuildId());
 
     // Under the lock from encoding to queueing, so that watch() sees each
@@ -163,6 +175,8 @@ void MetricsService::onSample(const Sample& sample)
 
 std::string MetricsService::currentBuildId()
 {
+    if (!fixedBuildId_.empty())
+        return fixedBuildId_;
     if (publicDir_.empty())
         return {};
 

@@ -66,7 +66,7 @@ public:
     explicit MetricsService(std::unique_ptr<MetricsProvider> provider, size_t historyCapacity = 120,
                             std::string publicDir = {},
                             std::chrono::seconds buildIdCheckInterval = std::chrono::seconds(5),
-                            HostInfo host = HostInfo::local());
+                            HostInfo host = HostInfo::local(), std::string fixedBuildId = {});
     ~MetricsService();
 
     // Starts the provider. Returns false if the provider failed to start
@@ -108,8 +108,15 @@ private:
     // provider-independent, so every provider's Sample gets them here.
     ProcessSampler processSampler_;
     NetworkSampler networkSampler_;
+    // With no dashboard open, the /proc scans run every kIdleScanInterval and the samples in between reuse these.
+    // Only the sampler thread touches them.
+    static constexpr std::chrono::seconds kIdleScanInterval{10};
+    std::chrono::steady_clock::time_point lastScan_{};
+    std::vector<ProcessSample> lastProcesses_;
+    NetworkSample lastNetwork_;
 
     std::string publicDir_;
+    std::string fixedBuildId_;   // when set, the build id, and the directory is not scanned
     std::chrono::seconds buildIdCheckInterval_;
     std::mutex buildIdMutex_;
     std::string cachedBuildId_;

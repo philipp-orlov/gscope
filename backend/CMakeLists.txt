@@ -37,7 +37,9 @@ target_compile_options(gscope-daemon PRIVATE
 # back to disk-only serving (today's behavior) if either is unavailable,
 # e.g. on a non-GNU toolchain.
 set(GSCOPE_INDEX_HTML_SRC "${CMAKE_CURRENT_SOURCE_DIR}/public/index.html")
-if(CMAKE_OBJCOPY AND CMAKE_OBJDUMP AND EXISTS "${GSCOPE_INDEX_HTML_SRC}")
+find_program(GSCOPE_GZIP gzip)
+find_package(ZLIB)
+if(CMAKE_OBJCOPY AND CMAKE_OBJDUMP AND GSCOPE_GZIP AND ZLIB_FOUND AND EXISTS "${GSCOPE_INDEX_HTML_SRC}")
     # objcopy's `-I binary` input has no format of its own for it to infer
     # an `-O`/`-B` from, unlike a real object file -- so the output target
     # (BFD format name, e.g. elf64-littleaarch64) and binary architecture
@@ -71,8 +73,10 @@ if(CMAKE_OBJCOPY AND CMAKE_OBJDUMP AND EXISTS "${GSCOPE_INDEX_HTML_SRC}")
             # from the input filename are fixed, independent of this repo's
             # directory layout.
             COMMAND ${CMAKE_COMMAND} -E copy "${GSCOPE_INDEX_HTML_SRC}" "${CMAKE_CURRENT_BINARY_DIR}/index.html"
+            # -n: no timestamp in the file, so one build's bytes (and its build id) do not depend on when it ran.
+            COMMAND ${GSCOPE_GZIP} -9 -n -f index.html
             COMMAND ${CMAKE_OBJCOPY} -I binary -O ${GSCOPE_OBJCOPY_OUTPUT_TARGET} -B ${GSCOPE_OBJCOPY_ARCH}
-                    index.html "${GSCOPE_EMBED_INDEX_HTML_OBJ}"
+                    index.html.gz "${GSCOPE_EMBED_INDEX_HTML_OBJ}"
             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
             DEPENDS "${GSCOPE_INDEX_HTML_SRC}"
             COMMENT "Embedding public/index.html into gscope-daemon via objcopy"
@@ -82,6 +86,7 @@ if(CMAKE_OBJCOPY AND CMAKE_OBJDUMP AND EXISTS "${GSCOPE_INDEX_HTML_SRC}")
             EXTERNAL_OBJECT TRUE GENERATED TRUE)
         target_sources(gscope-daemon PRIVATE "${GSCOPE_EMBED_INDEX_HTML_OBJ}")
         target_compile_definitions(gscope-daemon PRIVATE GSCOPE_EMBEDDED_INDEX_HTML=1)
+        target_link_libraries(gscope-daemon PRIVATE ZLIB::ZLIB)
     else()
         message(WARNING "gscope-daemon: could not determine objcopy's output target/architecture "
                         "for this toolchain -- index.html will not be embedded; "
